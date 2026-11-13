@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { compareSentence } from './learning/compare';
 import './session.css';
@@ -22,6 +22,7 @@ export default function SentenceSession({ scenario, lang = 'en', sentences: subs
   const [listening, setListening] = useState(false);
   const [speechStatus, setSpeechStatus] = useState('');
   const [elapsed, setElapsed] = useState(0);
+  const overlay = useRef(null);
   const dialog = useRef(null);
   const heading = useRef(null);
   const recognition = useRef(null);
@@ -69,7 +70,7 @@ export default function SentenceSession({ scenario, lang = 'en', sentences: subs
     const previous = siblings.map((node) => [node, node.inert]);
     siblings.forEach((node) => { node.inert = true; });
     document.body.style.overflow = 'hidden';
-    heading.current?.focus();
+    heading.current?.focus({ preventScroll: true });
     const trap = (event) => {
       if (event.key === 'Escape') { event.preventDefault(); stopSpeech(); closeRef.current?.(); return; }
       if (event.key !== 'Tab') return;
@@ -120,8 +121,16 @@ export default function SentenceSession({ scenario, lang = 'en', sentences: subs
     window.speechSynthesis.speak(utterance);
   };
 
+  useLayoutEffect(() => {
+    // The overlay owns scrolling. Focusing the heading alone can leave the
+    // header above the viewport after advancing from a long answer/feedback.
+    const container = overlay.current;
+    if (container) container.scrollTop = 0;
+    heading.current?.focus({ preventScroll: true });
+    if (container) container.scrollTop = 0;
+  }, [phase, index]);
+
   useEffect(() => {
-    heading.current?.focus();
     if (phase !== 'listen' || !sentence) return;
     const timer = setTimeout(play, 0);
     return () => { clearTimeout(timer); window.speechSynthesis?.cancel(); };
@@ -182,7 +191,7 @@ export default function SentenceSession({ scenario, lang = 'en', sentences: subs
     catch { setListening(false); setSpeechStatus('마이크를 시작할 수 없어요. 직접 입력해 주세요.'); }
   });
 
-  return createPortal(<div className="session-overlay"><section ref={dialog} className="sentence-session" role="dialog" aria-modal="true" aria-labelledby="session-title">
+  return createPortal(<div ref={overlay} className="session-overlay"><section ref={dialog} className="sentence-session" role="dialog" aria-modal="true" aria-labelledby="session-title">
     <header className="session-header"><div className="session-wordmark">bloom<span>practice</span></div><button className="session-close" onClick={close} aria-label={phase === 'summary' ? '세션 닫기' : '세션 취소하고 닫기'}>닫기 <span aria-hidden="true">×</span></button></header>
     <main className="session-main">
       <div className="session-eyebrow">{lang === 'ja' ? 'JAPANESE' : 'ENGLISH'} · {scenario.titleKo}</div>
