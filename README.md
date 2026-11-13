@@ -42,4 +42,9 @@ npm run dev -- --port 5173
 
 ## 검증
 
-`npm run build`로 프로덕션 빌드를 확인합니다. 독립 브라우저 회귀 검증은 `tests/`의 안내를 참고하세요. 실제 마이크 입력과 음성인식 서비스 응답은 기기에서 별도로 확인해야 합니다.
+`npm run build`로 프로덕션 빌드를 확인합니다. 브라우저 회귀 검증은 시스템 Chromium이 있는 환경에서 아래처럼 실행합니다. 다른 Chromium 실행 파일을 쓰려면 `CHROMIUM_PATH`를 지정하세요. 실제 마이크 입력과 음성인식 서비스 응답은 기기에서 별도로 확인해야 합니다.
+
+```sh
+npm ci --prefix tests
+npm test --prefix tests
+```
