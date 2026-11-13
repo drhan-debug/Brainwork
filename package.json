@@ -9,6 +9,7 @@
     "preview": "vite preview --host 0.0.0.0",
     "dev:worker": "wrangler dev",
     "db:migrate": "wrangler d1 migrations apply bloom-accounts --local",
+    "db:generate": "drizzle-kit generate",
     "dev:ui": "vite --host 0.0.0.0",
     "test:accounts": "node --test tests/accounts-integration.mjs",
     "test:calendar": "node --test tests/calendar.mjs"
@@ -20,6 +21,8 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "drizzle-kit": "^0.31.11",
+    "drizzle-orm": "^0.45.4",
     "esbuild": "^0.28.2",
     "vite": "^6.0.0",
     "wrangler": "^4.161.0"
