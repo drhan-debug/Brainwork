@@ -54,8 +54,26 @@ const japaneseGroups=[[
 const profiles={wife:{label:'아내 · 영어',language:'영어',locale:'en-US',groups:englishGroups,titles:['일상에 스며드는 영어','설레는 여행의 시작','나를 위한 작은 대화']},husband:{label:'남편 · 일본어',language:'일본어',locale:'ja-JP',groups:japaneseGroups,titles:['카페에서 주문하기','여행에서 길 찾기','처음 만나 인사하기']}};
 const STORAGE='bloom-profiles-v2';
 const blank=(name)=>({learned:[],reviews:{},reviewStages:{},sessions:0,minutes:0,name,goal:10,dates:[],dailyMinutes:{}});
-function readSavedStore(){try{const saved=JSON.parse(localStorage.getItem(STORAGE));if(saved?.version===2&&saved.learners?.wife&&saved.learners?.husband)return {...saved,active:profiles[saved.active]?saved.active:'wife'};}catch{}return null;}
-function readStore(){const saved=readSavedStore();if(saved)return saved;let legacy;try{legacy=JSON.parse(localStorage.getItem('bloom-state'));}catch{}const initial={version:2,active:'wife',learners:{wife:{...blank('지은'),...(legacy&&Array.isArray(legacy.learned)?legacy:{})},husband:blank('남편')}};try{localStorage.setItem(STORAGE,JSON.stringify(initial));}catch{}return initial;}
+const isRecord=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
+const nonnegative=value=>typeof value==='number'&&Number.isFinite(value)&&value>=0;
+function normalizeLearner(value,name){
+ const source=isRecord(value)?value:{},defaults=blank(name);
+ const strings=value=>Array.isArray(value)?value.filter(entry=>typeof entry==='string'):[];
+ const numbers=(value,valid=nonnegative)=>isRecord(value)?Object.fromEntries(Object.entries(value).filter(([,entry])=>valid(entry))):{};
+ return {...source,...defaults,
+  learned:strings(source.learned),reviews:numbers(source.reviews),
+  reviewStages:numbers(source.reviewStages,value=>Number.isInteger(value)&&value>=0&&value<=5),
+  sessions:nonnegative(source.sessions)&&Number.isInteger(source.sessions)?source.sessions:defaults.sessions,
+  minutes:nonnegative(source.minutes)?source.minutes:defaults.minutes,
+  name:typeof source.name==='string'?source.name:defaults.name,
+  goal:nonnegative(source.goal)&&source.goal>0?source.goal:defaults.goal,
+  dates:strings(source.dates),dailyMinutes:numbers(source.dailyMinutes)};
+}
+function readSavedStore(){try{
+ const saved=JSON.parse(localStorage.getItem(STORAGE));
+ if(saved?.version===2&&isRecord(saved.learners))return {...saved,active:Object.hasOwn(profiles,saved.active)?saved.active:'wife',learners:{wife:normalizeLearner(saved.learners.wife,'지은'),husband:normalizeLearner(saved.learners.husband,'남편')}};
+}catch{}return null;}
+function readStore(){const saved=readSavedStore();if(saved)return saved;let legacy;try{legacy=JSON.parse(localStorage.getItem('bloom-state'));}catch{}const initial={version:2,active:'wife',learners:{wife:normalizeLearner(legacy,'지은'),husband:blank('남편')}};try{localStorage.setItem(STORAGE,JSON.stringify(initial));}catch{}return initial;}
 const dateKey=(date=new Date())=>`${date.getFullYear()}-${date.getMonth()+1}-${date.getDate()}`;
 function streak(dates=[]){let day=new Date();if(!dates.includes(dateKey(day)))day.setDate(day.getDate()-1);let count=0;while(dates.includes(dateKey(day))){count++;day.setDate(day.getDate()-1)}return count;}
 function Ruby({parts,fallback}){return <>{parts?parts.map((p,i)=>Array.isArray(p)?<ruby key={i}>{p[0]}<rt>{p[1]}</rt></ruby>:<React.Fragment key={i}>{p}</React.Fragment>):fallback}</>;}
@@ -82,39 +100,47 @@ const dialogues={wife:[cafeDialogues.wife,[
 cafeDialogues.husband.forEach((t,i)=>{t.answerParts=[japaneseGroups[0][0].sentence,japaneseGroups[0][1].sentence,[['大丈夫','だいじょうぶ'],'です。ありがとうございます。']][i]});
 
 function App(){
- const [store,setStore]=useState(readStore),[page,setPage]=useState('홈'),[modal,setModal]=useState(null),[lesson,setLesson]=useState(null),[index,setIndex]=useState(0),[revealed,setRevealed]=useState(false),[answer,setAnswer]=useState(''),[feedback,setFeedback]=useState(null),[speech,setSpeech]=useState(''),[listening,setListening]=useState(false),[query,setQuery]=useState(''),[filter,setFilter]=useState('전체'),[scenario,setScenario]=useState(0),[now,setNow]=useState(Date.now()),[toast,setToast]=useState('');
- const started=useRef(0),recognition=useRef(null),generation=useRef(0),storeRef=useRef(store);storeRef.current=store;
+ const [store,setStore]=useState(readStore),[page,setPage]=useState('홈'),[modal,setModal]=useState(null),[lesson,setLesson]=useState(null),[index,setIndex]=useState(0),[revealed,setRevealed]=useState(false),[answer,setAnswer]=useState(''),[feedback,setFeedback]=useState(null),[speech,setSpeech]=useState(''),[listening,setListening]=useState(false),[query,setQuery]=useState(''),[filter,setFilter]=useState('전체'),[scenario,setScenario]=useState(0),[now,setNow]=useState(Date.now()),[toast,setToast]=useState(''),[saveFailed,setSaveFailed]=useState(false);
+ const started=useRef(0),recognition=useRef(null),generation=useRef(0),storeRef=useRef(store),committed=useRef(store),pending=useRef([]);storeRef.current=store;
  const active=store.active,profile=profiles[active],data=store.learners[active],allWords=profile.groups.flat(),todayMinutes=data.dailyMinutes?.[dateKey()]||0;
  const due=allWords.filter(w=>Number(data.reviews[w.key])>0&&Number(data.reviews[w.key])<=now);
  const item=lesson?.items[index];const conversation=dialogues[active][lesson?.group||0];const turn=conversation[index];
  useEffect(()=>{const t=setInterval(()=>setNow(Date.now()),15000);return()=>clearInterval(t)},[]);
  useEffect(()=>()=>{generation.current++;recognition.current?.abort();window.speechSynthesis?.cancel()},[]);
  useEffect(()=>{const handler=e=>{if(e.key==='Escape')close()};window.addEventListener('keydown',handler);return()=>window.removeEventListener('keydown',handler)},[]);
- useEffect(()=>{const sync=e=>{if(e.key!==STORAGE)return;const latest=readSavedStore();if(!latest)return;const next={...latest,active:storeRef.current.active};storeRef.current=next;setStore(next);setNow(Date.now())};window.addEventListener('storage',sync);return()=>window.removeEventListener('storage',sync)},[]);
- // Read immediately before each mutation: another tab may have saved since our last render.
- function persist(update){const local=storeRef.current;const latest=readSavedStore()||local;const next=update({...latest,active:local.active});storeRef.current=next;setStore(next);try{localStorage.setItem(STORAGE,JSON.stringify(next))}catch{notify('저장 공간을 확인해 주세요. 현재 변경 사항은 이 창에서만 유지돼요.')}}
- function save(update){persist(current=>({...current,learners:{...current.learners,[current.active]:update(current.learners[current.active])}}))}
+ useEffect(()=>{const sync=e=>{if(e.key!==STORAGE)return;const latest=readSavedStore();if(!latest)return;if(pending.current.length){persist();return}const next={...latest,active:storeRef.current.active};committed.current=next;storeRef.current=next;setStore(next);setNow(Date.now())};window.addEventListener('storage',sync);return()=>window.removeEventListener('storage',sync)},[]);
+ // Retry operations, never optimistic learner snapshots: rebase onto the latest saved data.
+ // Each queued update captures its learner and immutable input before it can be replayed.
+ function persist(operation,active=storeRef.current.active){
+  if(operation)pending.current.push(operation);
+  const latest=readSavedStore()||committed.current;
+  const next=pending.current.reduce((current,{learnerId,update})=>({...current,learners:{...current.learners,[learnerId]:update(current.learners[learnerId])}}),{...latest,active});
+  storeRef.current=next;setStore(next);setNow(Date.now());
+  try{localStorage.setItem(STORAGE,JSON.stringify(next));committed.current=next;pending.current=[];setSaveFailed(false)}
+  catch{setSaveFailed(true);notify('저장하지 못했어요. 변경 사항은 이 창에 보관하고 다음 변경이나 다른 탭 동기화 때 다시 저장해요. 창을 닫으면 저장되지 않은 기록은 사라져요.')}
+ }
+ function save(update){persist({learnerId:storeRef.current.active,update})}
  function notify(message){setToast(message);setTimeout(()=>setToast(''),3500)}
  function stop(){generation.current++;recognition.current?.abort();recognition.current=null;setListening(false);window.speechSynthesis?.cancel()}
  function close(){stop();setModal(null);setLesson(null)}
- function switchLearner(value){stop();persist(current=>({...current,active:value}));setModal(null);setLesson(null);setPage('홈');setQuery('');setFilter('전체');setScenario(0);reset();}
+ function switchLearner(value){stop();persist(null,value);setModal(null);setLesson(null);setPage('홈');setQuery('');setFilter('전체');setScenario(0);reset();}
  function reset(){setAnswer('');setFeedback(null);setSpeech('');setRevealed(false)}
  function speak(text){if(!window.speechSynthesis||!window.SpeechSynthesisUtterance){notify('이 브라우저는 음성 재생을 지원하지 않아요. 문장을 읽고 연습해 주세요.');return}speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.lang=profile.locale;u.rate=.8;u.onerror=()=>notify('음성을 재생할 수 없어요. 기기의 음성 설정을 확인해 주세요.');speechSynthesis.speak(u)}
  function open(mode='단어 학습',group=0){stop();setLesson({mode,items:mode==='복습'?due:[...profile.groups[group]],group});setIndex(0);reset();started.current=Date.now();setModal('lesson')}
  function record(){const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;if(!Recognition){setSpeech('음성인식을 지원하지 않는 브라우저예요. 아래 입력창으로 연습해 주세요.');return}stop();const token=generation.current;const r=new Recognition();recognition.current=r;r.lang=profile.locale;r.interimResults=false;r.onstart=()=>{if(token===generation.current)setListening(true)};r.onend=()=>{if(token===generation.current)setListening(false)};r.onerror=()=>{if(token===generation.current){setListening(false);setSpeech('마이크를 사용할 수 없어요. 권한을 확인하거나 아래에 직접 입력해 주세요.')}};r.onresult=e=>{if(token!==generation.current)return;setAnswer(e.results[0][0].transcript);setSpeech('인식한 문장을 입력창에 넣었어요. 문장 확인을 눌러 비교하세요.');setFeedback(null)};try{r.start()}catch{setListening(false);setSpeech('음성인식을 시작하지 못했어요. 아래에 직접 입력해 주세요.')}}
  function attempt(){if(!answer.trim())return;const ok=lesson.mode==='짧은 대화'?(active==='wife'?turn.accept.some(a=>normalized(a)===normalized(answer)):matches(answer,{example:turn.answer,kana:turn.kana})):matches(answer,item);setFeedback({ok});setRevealed(true)}
  function finish(known=true){
-  stop();const total=lesson.mode==='짧은 대화'?conversation.length:lesson.items.length;const completed=index===total-1;const answeredAt=Date.now();
+  stop();const total=lesson.mode==='짧은 대화'?conversation.length:lesson.items.length;const completed=index===total-1;const answeredAt=Date.now(),day=dateKey(new Date(answeredAt)),elapsed=Math.round((answeredAt-started.current)/6000)/10,wordKey=item?.key,isDialogue=lesson.mode==='짧은 대화';
   save(current=>{
    let next={...current};
-   if(lesson.mode!=='짧은 대화'){
-    const dueAt=Number(current.reviews[item.key]);
+   if(!isDialogue){
+    const dueAt=Number(current.reviews[wordKey]);
     // Extra practice may mark a word learned, but cannot postpone an existing review.
     const schedule=!known||!(dueAt>answeredAt);
-    next.learned=known?[...new Set([...current.learned,item.key])]:current.learned;
-    if(schedule){const stage=known?Math.min((current.reviewStages?.[item.key]||0)+1,5):0;const days=[0,1,3,7,14,30];next.reviews={...current.reviews,[item.key]:answeredAt+(known?days[stage]*86400000:600000)};next.reviewStages={...current.reviewStages,[item.key]:stage}}
+    next.learned=known?[...new Set([...current.learned,wordKey])]:current.learned;
+    if(schedule){const stage=known?Math.min((current.reviewStages?.[wordKey]||0)+1,5):0;const days=[0,1,3,7,14,30];next.reviews={...current.reviews,[wordKey]:answeredAt+(known?days[stage]*86400000:600000)};next.reviewStages={...current.reviewStages,[wordKey]:stage}}
    }
-   if(completed){const elapsed=Math.round((answeredAt-started.current)/6000)/10;next={...next,sessions:current.sessions+1,minutes:Math.round((current.minutes+elapsed)*10)/10,dates:[...new Set([...(current.dates||[]),dateKey()])],dailyMinutes:{...current.dailyMinutes,[dateKey()]:Math.round(((current.dailyMinutes?.[dateKey()]||0)+elapsed)*10)/10}}}
+   if(completed){next={...next,sessions:current.sessions+1,minutes:Math.round((current.minutes+elapsed)*10)/10,dates:[...new Set([...(current.dates||[]),day])],dailyMinutes:{...current.dailyMinutes,[day]:Math.round(((current.dailyMinutes?.[day]||0)+elapsed)*10)/10}}}
    return next;
   });
   if(completed){setModal('완료');setLesson(null)}else{setIndex(i=>i+1);reset()}
@@ -133,8 +159,8 @@ function App(){
  {lesson.mode==='짧은 대화'?<><p className="eyebrow">{profile.titles[lesson.group]} · 대화 {index+1}</p><div className="dialogue-prompt" lang={profile.locale}><Ruby parts={turn.parts} fallback={turn.prompt}/><button aria-label="상대방 말 듣기" onClick={()=>speak(turn.prompt)}><Volume2 size={20}/></button></div><p className="translation">{turn.ko}</p><div className="hint">내가 말할 뜻: {turn.meaning}</div></>:lesson.mode==='문장 떠올리기'?<><h2>이 문장을 {profile.language}로 말해 볼까요?</h2><p className="recall-prompt">{item.ko}</p><p className="translation">먼저 답을 입력해 보세요. 시도 후 예문을 확인할 수 있어요.</p></>:<><div className="lesson-word"><h2 lang={profile.locale}><Ruby parts={item.parts} fallback={item.word}/></h2><button aria-label="발음 듣기" onClick={()=>speak(item.word)}><Volume2 size={24}/></button></div><span className="pron">{item.pron}</span>{revealed||lesson.mode==='듣고 따라 말하기'?<><h3>{item.meaning}</h3><p className="hint"><Lightbulb size={17}/>{item.hint}</p><button className="example" lang={profile.locale} aria-label="예문 듣기" onClick={()=>speak(item.example)}><span><Ruby parts={item.sentence} fallback={item.example}/></span><Volume2 size={16}/></button>{item.kana&&<p className="kana">가나 읽기: {item.kana}</p>}<p className="translation">{item.ko}</p></>:<button className="reveal" onClick={()=>setRevealed(true)}>장면을 보고 뜻을 떠올려 보세요.<span>뜻 확인하기<ArrowRight size={15}/></span></button>}</>}
  {['듣고 따라 말하기','문장 떠올리기','짧은 대화'].includes(lesson.mode)&&<form className="speaking" onSubmit={e=>{e.preventDefault();attempt()}}><button type="button" className="primary" onClick={record} disabled={listening}><Mic size={17}/>{listening?'듣고 있어요…':'마이크로 말하기'}</button><p role="status">{speech||'음성인식 또는 직접 입력으로 연습해요. 인식된 문장의 비교이며 발음 평가는 제공하지 않아요.'}</p><label className="answer-label">{lesson.mode==='짧은 대화'?'나의 대답':'문장 입력 연습'}<input lang={profile.locale} aria-label={lesson.mode==='짧은 대화'?'나의 대답':'문장 입력 연습'} placeholder={active==='husband'?'일본어 또는 가나로 입력하세요':'영어 문장을 입력하세요'} value={answer} onChange={e=>{setAnswer(e.target.value);setFeedback(null)}}/></label><button className="check-answer" disabled={!answer.trim()||listening} type="submit">문장 확인</button>{feedback&&<div className={'answer-feedback '+(feedback.ok?'correct':'retry')} role="status"><strong>{feedback.ok?'예문과 일치해요!':'예문과 비교해 보세요.'}</strong><p>{lesson.mode==='짧은 대화'?'다른 자연스러운 표현도 가능해요. 아래는 한 가지 답변 예시예요.':'띄어쓰기와 문장부호를 제외한 문장을 비교했어요.'}</p>{lesson.mode!=='듣고 따라 말하기'&&<><p className="example" lang={profile.locale}>{lesson.mode==='짧은 대화'?<Ruby parts={turn.answerParts} fallback={turn.answer}/>:<Ruby parts={item.sentence} fallback={item.example}/>}</p>{(turn?.kana&&lesson.mode==='짧은 대화'||item.kana&&lesson.mode==='문장 떠올리기')&&<p className="kana">{lesson.mode==='짧은 대화'?turn.kana:item.kana}</p>}<button type="button" className="text-button" onClick={()=>speak(lesson.mode==='짧은 대화'?turn.answer:item.example)}><Volume2 size={17}/>예시 듣기</button></>}</div>}</form>}
  {(lesson.mode==='짧은 대화'?feedback:lesson.mode==='문장 떠올리기'||lesson.mode==='듣고 따라 말하기'?feedback:revealed)&&<div className="lesson-actions">{lesson.mode==='짧은 대화'?<button className="primary wide" onClick={()=>finish()}>{index===2?'대화 마치기':'다음 대화'}<ArrowRight size={16}/></button>:<><button onClick={()=>finish(false)}><RotateCcw size={16}/>다시 볼게요</button><button className="primary" onClick={()=>finish(true)}><Check size={17}/>기억했어요</button></>}</div>}</div></>}
- {modal==='완료'&&<div className="completion"><span className="completion-icon"><Sprout size={52}/></span><h2>오늘도 한 뼘 자랐어요!</h2><p>{profile.label}의 학습 기록을 저장했어요.<br/>복습 노트에서 다음 복습 시간을 확인하세요.</p><div className="completion-stats"><span><strong>{data.learned.length}</strong>기억한 단어</span><span><strong>{data.sessions}</strong>완료한 학습</span></div><button className="primary" onClick={()=>{close();setPage('복습 노트')}}>나의 단어장 보기<ArrowRight size={17}/></button></div>}
- {modal==='설정'&&<div className="settings"><div className="eyebrow">{profile.label} · MY LITTLE ROUTINE</div><h2>나에게 맞는 학습 설정</h2><label>이름<input aria-label="이름" maxLength={12} value={data.name} onChange={e=>save(current=>({...current,name:e.target.value}))}/></label><label>하루 학습 목표<select aria-label="하루 학습 목표" value={data.goal} onChange={e=>save(current=>({...current,goal:Number(e.target.value)}))}>{[...new Set([5,10,20,data.goal])].sort((a,b)=>a-b).map(n=><option value={n} key={n}>{n}분</option>)}</select></label><p>{profile.label}의 설정과 기록은 다른 학습자와 분리해 이 브라우저에 저장해요.</p><button className="primary" onClick={close}>설정 완료<Check size={16}/></button></div>}
+ {modal==='완료'&&<div className="completion"><span className="completion-icon"><Sprout size={52}/></span><h2>오늘도 한 뼘 자랐어요!</h2><p>{profile.label}의 학습 기록을 {saveFailed?'이 창에 보관 중이에요.':'저장했어요.'}<br/>복습 노트에서 다음 복습 시간을 확인하세요.</p><div className="completion-stats"><span><strong>{data.learned.length}</strong>기억한 단어</span><span><strong>{data.sessions}</strong>완료한 학습</span></div><button className="primary" onClick={()=>{close();setPage('복습 노트')}}>나의 단어장 보기<ArrowRight size={17}/></button></div>}
+ {modal==='설정'&&<div className="settings"><div className="eyebrow">{profile.label} · MY LITTLE ROUTINE</div><h2>나에게 맞는 학습 설정</h2><label>이름<input aria-label="이름" maxLength={12} value={data.name} onChange={e=>{const name=e.target.value;save(current=>({...current,name}))}}/></label><label>하루 학습 목표<select aria-label="하루 학습 목표" value={data.goal} onChange={e=>{const goal=Number(e.target.value);save(current=>({...current,goal}))}}>{[...new Set([5,10,20,data.goal])].sort((a,b)=>a-b).map(n=><option value={n} key={n}>{n}분</option>)}</select></label><p>{profile.label}의 설정과 기록은 다른 학습자와 분리해 이 브라우저에 저장해요.</p><button className="primary" onClick={close}>설정 완료<Check size={16}/></button></div>}
  {modal==='도움말'&&<div className="help"><h2>함께 자라는 언어 습관</h2><p><strong>01. 학습자를 선택해요</strong><br/>아내는 영어, 남편은 일본어. 이름, 목표와 모든 기록을 따로 보관해요. 기존 영어 기록은 아내에게 한 번만 옮겨요.</p><p><strong>02. 장면을 보고 말해요</strong><br/>단어를 배우고, 예문을 듣고 따라 말해요. 문장 떠올리기는 답을 직접 시도한 후 예시를 보여줘요. 짧은 대화에서는 세 번 대답해요.</p><p><strong>03. 잊기 전에 다시 만나요</strong><br/>기억한 단어는 1, 3, 7, 14, 30일 간격으로, 어려운 단어는 10분 뒤에 다시 복습해요.</p><small>음성 기능은 기기와 브라우저에 따라 다릅니다. 마이크를 사용할 수 없으면 직접 입력하세요. 음성인식은 발음 평가가 아닙니다. 데이터는 이 기기에만 저장되며 브라우저 데이터를 지우면 삭제됩니다.</small></div>}
  </section></div>}{toast&&<div className="toast" role="status">{toast}</div>}</div>;
 }
