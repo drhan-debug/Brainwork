@@ -14,11 +14,11 @@
   <main>
     <header>
       <div><div class="brand">BLOOM / WORK LOG</div><h1>계정과 함께, 학습을 이어서.</h1><p class="intro">Bloom 자체 계정과 개인별 서버 기록을 준비하고 있습니다.<br>확인된 기준과 구현 중인 작업, 검증 대기를 구분해 보여드립니다.</p></div>
-      <span class="live"><span class="dot" aria-hidden="true"></span>계정 기능 검증 중</span>
+      <span class="live"><span class="dot" aria-hidden="true"></span>호스팅 DB 연결 보완 중</span>
     </header>
     <section class="hero" aria-labelledby="current-phase">
       <div><div class="eyebrow">CURRENT PHASE</div><h2 id="current-phase">Bloom 회원가입·로그인과 개인별 기록</h2><p>이메일·비밀번호로 가입하는 Bloom 자체 계정을 선택했습니다. ChatGPT 로그인은 사용하지 않습니다.<br>개인별 프로필·학습 진도를 서버에 보관하고, 기존 로컬 기록은 사용자가 명시적으로 가져오는 흐름을 준비합니다.</p></div>
-      <div class="hero-side"><div class="eyebrow">VALIDATION IN PROGRESS</div><strong>서버 검증 15개 통과</strong><small>계정 인증·서버 저장·배포 완료를 뜻하지 않습니다.</small></div>
+      <div class="hero-side"><div class="eyebrow">VALIDATION IN PROGRESS</div><strong>서버 검증 15개 통과</strong><small>비공개 첫 배포 확인 · 호스팅 DB 스키마 보완 중입니다.</small></div>
     </section>
     <section class="stats" aria-label="확인된 작업 기준">
       <div class="stat"><div class="label">확인한 소스 기준</div><div class="value"><code>9e6972d</code></div><div class="note">main 기준 · <code>fbb67ae</code> 선행 이력 확인</div></div>
@@ -33,7 +33,7 @@
         <article class="task"><span class="number">03</span><div><h3>백엔드·API 설계와 구현</h3><p>서버 D1 저장과 계정별 권한 구현 · 실제 D1 통합 테스트 15개 통과<br>기록 충돌·중복 요청을 다루는 버전 확인과 요청 식별 구조 적용</p></div><span class="status">진행 중</span></article>
         <article class="task"><span class="number">04</span><div><h3>프런트엔드 계정 경험</h3><p>가입·로그인·로그아웃과 저장 상태 표시<br>계정과 학습 기록을 이해하기 쉬운 화면으로 연결</p></div><span class="status">진행 중</span></article>
         <article class="task"><span class="number">05</span><div><h3>기존 로컬 기록 가져오기</h3><p>현재 브라우저의 기록은 사용자가 명시적으로 선택해 가져오기<br>계정 간 데이터 섞임과 중복 가져오기 방지 검토</p></div><span class="status">진행 중</span></article>
-        <article class="task"><span class="number">06</span><div><h3>호스팅 가능성 확인</h3><p>Site 등록·프로덕션 빌드 확인 · Worker 패키징과 소스 전송 준비<br>실제 호스팅 연결과 배포는 아직 미검증</p></div><span class="status">진행 중</span></article>
+        <article class="task"><span class="number">06</span><div><h3>호스팅 가능성 확인</h3><p>비공개 첫 배포 완료 · 호스팅 D1 바인딩 확인<br>테이블이 비어 있어 Drizzle 마이그레이션 패키징 보완 · 재배포 검증 대기</p></div><span class="status">진행 중</span></article>
         <article class="task"><span class="number">07</span><div><h3>독립 계정·기록 QA</h3><p>실제 D1 통합 테스트 15개·달력 사례 13개 통과<br>달력 사례는 호스트 시간대 3곳에서 검증 · 실제 브라우저 UI 검증은 실행 환경 문제로 미실행</p></div><span class="status pending">일부 통과</span></article>
         <article class="task"><span class="number">08</span><div><h3>성장과 학습의 연속성</h3><p>기존 영어·일본어 학습과 복습 흐름 보존<br>계정에 쌓이는 학습 진도와 성장 경험 연결<br>학습 활동이 생긴 뒤에는 해당 프로필의 언어 유지</p></div><span class="status">구현 준비</span></article>
       </div>
@@ -41,10 +41,10 @@
     <div class="bottom">
       <section class="info"><h2>이전 단계에서 확인한 결과</h2><p>문장 중심 영어·일본어 세션의 브라우저 테스트 30/30, 모바일·파비콘 집중 테스트 3/3, 프로덕션 빌드 통과 기록이 있습니다. 이 결과는 이전 학습 기능에 대한 검증이며, 현재 추가하는 회원가입·로그인·서버 기록 기능의 통과 결과가 아닙니다.</p><p style="margin-top:8px">이전 버전 화면: <a href="../scratch/bloom-preview/final-english-desktop.png">영어 데스크톱</a> · <a href="../scratch/bloom-preview/final-japanese-mobile-recall.png">일본어 모바일 복습</a></p></section>
       <section class="info"><h2>기록 보호 원칙</h2><p>기존 브라우저의 영어·일본어 프로필과 학습 기록을 보존하는 것이 기준입니다. 새 계정에서는 개인별 비공개 서버 기록을 목표로 합니다. 기존 로컬 기록을 자동으로 계정에 합치지 않고, 사용자가 가져오기를 선택하는 흐름으로 준비합니다.</p></section>
-      <section class="info"><h2>아직 확인하지 않은 사항</h2><p>실제 D1 통합 테스트 15개와 달력 사례 13개가 통과했으며, 달력 사례는 호스트 시간대 3곳에서 확인했습니다. 프로덕션 빌드도 통과했습니다. 이번 버전의 실제 브라우저 UI 검증은 실행 환경 문제로 수행하지 못했으며, 실제 호스팅 검증과 배포는 대기 중입니다. 이 페이지의 진행 중 표시는 인증, 기기 간 기록 공유 또는 서비스 배포가 완료되었다는 뜻이 아닙니다.</p></section>
+      <section class="info"><h2>아직 확인하지 않은 사항</h2><p>실제 D1 통합 테스트 15개와 달력 사례 13개가 통과했으며, 달력 사례는 호스트 시간대 3곳에서 확인했습니다. 프로덕션 빌드도 통과했습니다. 이번 버전의 실제 브라우저 UI 검증은 실행 환경 문제로 수행하지 못했으며, 비공개 첫 배포는 완료되었으나, 호스팅 DB 테이블이 비어 있어 계정 서비스는 아직 완료되지 않았습니다. 생성한 Drizzle 마이그레이션을 포함해 재배포하고 실제 테이블을 확인해야 합니다. 이 페이지의 진행 중 표시는 인증, 기기 간 기록 공유 또는 서비스 배포가 완료되었다는 뜻이 아닙니다.</p></section>
       <section class="info"><h2>페이지 읽는 방법</h2><p>이 화면은 파일에 기록된 최신 현황입니다. 자동 새로고침을 켜 두면 20초마다 이후 업데이트를 표시합니다. 완료 표시는 확인된 작업에만 사용하며, 시간은 미국 로스앤젤레스 기준입니다.</p></section>
     </div>
-    <footer><div>마지막 업데이트 <time datetime="2026-11-13T12:57:30-08:00">2026. 11. 13. 12:57 PST</time> · America/Los_Angeles</div><label class="refresh"><input id="auto-refresh" type="checkbox" checked>20초마다 자동 새로고침</label></footer>
+    <footer><div>마지막 업데이트 <time datetime="2026-11-13T13:02:25-08:00">2026. 11. 13. 13:02 PST</time> · America/Los_Angeles</div><label class="refresh"><input id="auto-refresh" type="checkbox" checked>20초마다 자동 새로고침</label></footer>
   </main>
   <script>
     (() => {
