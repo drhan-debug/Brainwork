@@ -13,49 +13,38 @@
 <body>
   <main>
     <header>
-      <div><div class="brand">BLOOM / WORK LOG</div><h1>작업의 흐름을 한눈에.</h1><p class="intro">Bloom의 검토와 개선 진행 상황을 모아 둔 페이지입니다.<br>확인된 기준과 현재 작업, 다음 단계를 구분해 보여드립니다.</p></div>
-      <span class="live"><span class="dot" aria-hidden="true"></span>이번 작업 완료</span>
+      <div><div class="brand">BLOOM / WORK LOG</div><h1>계정과 함께, 학습을 이어서.</h1><p class="intro">Bloom 자체 계정과 개인별 서버 기록을 준비하고 있습니다.<br>확인된 기준과 구현 중인 작업, 검증 대기를 구분해 보여드립니다.</p></div>
+      <span class="live"><span class="dot" aria-hidden="true"></span>계정 기능 작업 중</span>
     </header>
     <section class="hero" aria-labelledby="current-phase">
-      <div><div class="eyebrow">CURRENT PHASE</div><h2 id="current-phase">문장 중심 영어·일본어 세션 반영 완료</h2><p>공통 20개 상황의 문장 중심 학습 세션을 GitHub main에 반영했습니다.<br>모바일 스크롤·초점·파비콘 수정과 독립 QA를 완료했습니다.</p></div>
-      <div class="hero-side"><div class="eyebrow">VERIFIED DELIVERY</div><strong>이번 작업 완료</strong><small>검증된 소스·테스트 기준 ad6fe53 · GitHub main 반영</small></div>
+      <div><div class="eyebrow">CURRENT PHASE</div><h2 id="current-phase">Bloom 회원가입·로그인과 개인별 기록</h2><p>이메일·비밀번호로 가입하는 Bloom 자체 계정을 선택했습니다. ChatGPT 로그인은 사용하지 않습니다.<br>개인별 프로필·학습 진도를 서버에 보관하고, 기존 로컬 기록은 사용자가 명시적으로 가져오는 흐름을 준비합니다.</p></div>
+      <div class="hero-side"><div class="eyebrow">IMPLEMENTATION IN PROGRESS</div><strong>설계·구현 진행 중</strong><small>계정 인증·서버 저장·배포 완료를 뜻하지 않습니다.</small></div>
     </section>
     <section class="stats" aria-label="확인된 작업 기준">
-      <div class="stat"><div class="label">원격 반영</div><div class="value">GitHub main</div><div class="note">검증된 반영 기준 <code>ad6fe53</code></div></div>
-      <div class="stat"><div class="label">모바일·파비콘 집중 테스트</div><div class="value">3 / 3</div><div class="note">스크롤·초점·파비콘 검증 통과</div></div>
-      <div class="stat"><div class="label">전체 브라우저 테스트</div><div class="value">30 / 30</div><div class="note">기존 18개 + 문장 세션 12개 · 빌드 통과</div></div>
+      <div class="stat"><div class="label">확인한 소스 기준</div><div class="value"><code>9e6972d</code></div><div class="note">main 기준 · <code>fbb67ae</code> 선행 이력 확인</div></div>
+      <div class="stat"><div class="label">이전 학습 기능 테스트</div><div class="value">30 / 30</div><div class="note">이전 단계 통과 기록 · 새 계정 기능 검증과 별개</div></div>
+      <div class="stat"><div class="label">새 계정 기능 테스트</div><div class="value">검증 대기</div><div class="note">계정별 접근·저장·가져오기 검증 예정</div></div>
     </section>
     <section aria-labelledby="work-title">
-      <div class="section-title"><h2 id="work-title">완료한 작업</h2><span>진행률 대신 실제 작업 상태를 표시합니다</span></div>
+      <div class="section-title"><h2 id="work-title">현재 작업</h2><span>진행률 대신 확인된 상태를 표시합니다</span></div>
       <div class="panel">
-        <article class="task"><span class="number">01</span><div><h3>데이터 검토 <code>data_audit</code></h3><p>검토 당시 P1 · 잘못된 v2 필드 타입으로 실행 오류 발생<br>P2 · 저장 실패 후 후속 처리에서 로컬 기록 유실 가능</p></div><span class="status">검토 완료</span></article>
-        <article class="task"><span class="number">02</span><div><h3>학습 흐름 검토 <code>learning_audit</code></h3><p>일본어 인사에 답하는 표현 교정·검증 완료</p></div><span class="status">검토 완료</span></article>
-        <article class="task"><span class="number">03</span><div><h3>사용 경험 검토 <code>ux_audit</code></h3><p>모달 초점 관리와 작은 글자의 명암 대비 개선 완료</p></div><span class="status">검토 완료</span></article>
-        <article class="task"><span class="number">04</span><div><h3>기록 보호 수정</h3><p>v2 데이터 검증과 저장 실패 시 기록 보존 · <code>3c71166</code></p></div><span class="status">완료</span></article>
-        <article class="task"><span class="number">05</span><div><h3>독립 테스트</h3><p>데이터 오류와 저장 실패 사례 검증 · <code>a3749d2</code></p></div><span class="status">완료</span></article>
-        <article class="task"><span class="number">06</span><div><h3>키보드 접근성 검증</h3><p>구현 <code>6e309fc</code> · 테스트 <code>1eff48f</code><br>모달 초점 관리 · 글자 대비 수정 및 원격 반영</p></div><span class="status">완료</span></article>
-        <article class="task"><span class="number">07</span><div><h3>Issue #2 · 분석 검토</h3><p>사용자가 제공한 6단계 요구와 GitHub 분석의 구현 방향 정리</p></div><span class="status">완료</span></article>
-        <article class="task"><span class="number">08</span><div><h3>문장 세션 스키마</h3><p>원격 반영 <code>30b9284</code> · 기존 공통 20개 상황 × 언어별 4문장 구조 검증</p></div><span class="status">반영 완료</span></article>
-        <article class="task"><span class="number">09</span><div><h3>영어 콘텐츠</h3><p>20개 상황 · 80개 문장 · <code>0b41e9e</code><br>자연스러운 표현 2건 교정·검증 · <code>a7e60e6</code></p></div><span class="status">반영 완료</span></article>
-        <article class="task"><span class="number">10</span><div><h3>일본어 콘텐츠</h3><p>20개 상황 · 80개 문장 · <code>ae99332</code><br>독립 검토 완료 · 일본어 읽기 확인</p></div><span class="status">반영 완료</span></article>
-        <article class="task"><span class="number">11</span><div><h3>음성 전사 비교</h3><p>전사 텍스트 비교 모듈 · <code>0d32ccf</code><br>원격 반영 완료 · 통합 검증 완료</p></div><span class="status">반영 완료</span></article>
-        <article class="task"><span class="number">12</span><div><h3>전체 화면 세션 플레이어</h3><p>플레이어 <code>d090253</code> · 초점/경과시간 보완 <code>3d7cff9</code><br>단계 연결 구현 및 독립 브라우저 검증 완료</p></div><span class="status">검증 완료</span></article>
-        <article class="task"><span class="number">13</span><div><h3>문장별 복습 큐</h3><p>스케줄러 <code>a01ee0b</code> · 조기 정답 보정 <code>5a8968c</code><br>오답은 현지 날짜 기준 다음 날 · 정답은 3·7·14·30·60일 간격<br>통합 검증 완료</p></div><span class="status">반영 완료</span></article>
-        <article class="task"><span class="number">14</span><div><h3>독립 커리큘럼 QA</h3><p>공통 20개 상황·양 언어 합계 160문장 스키마 정상 · 일본어 읽기 양호<br>영어 자연스러움 2건 교정 후 검증</p></div><span class="status">완료</span></article>
-        <article class="task"><span class="number">15</span><div><h3>앱 통합</h3><p><code>735d028</code> · 기존 답인사 수정 <code>5c9007e</code><br>시작 버튼·상황 목록·문장 진도·복습 큐·동적 제목 검증</p></div><span class="status">검증 완료</span></article>
-        <article class="task"><span class="number">16</span><div><h3>새 세션 전체 브라우저 QA</h3><p>최종 30/30 통과 · 기존 18개 + 문장 세션 12개<br>브라우저 페이지 오류 0 · 프로덕션 빌드 통과</p></div><span class="status">완료</span></article>
-        <article class="task"><span class="number">17</span><div><h3>최종 모바일 점검</h3><p>모바일 화면 전환 시 스크롤·초점 초기화 · 파비콘 수정<br>집중 테스트 3/3 통과 · 독립 QA 완료</p></div><span class="status">완료</span></article>
-        <article class="task"><span class="number">18</span><div><h3>최종 GitHub 푸시</h3><p>검증된 소스·테스트 <code>ad6fe53</code>까지 GitHub main 반영</p></div><span class="status">반영 완료</span></article>
-        <article class="task"><span class="number">19</span><div><h3>진행 현황 페이지 <code>progress_html</code></h3><p>문장 중심 세션의 최종 검증 결과와 완료 상태 반영</p></div><span class="status">갱신 완료</span></article>
+        <article class="task"><span class="number">01</span><div><h3>로그인 방식 확정</h3><p>Bloom 자체 이메일·비밀번호 회원가입과 로그인<br>사용자별 비공개 프로필·학습 진도 저장</p></div><span class="status">방향 확정</span></article>
+        <article class="task"><span class="number">02</span><div><h3>기준 소스·작업 환경 확인</h3><p>main <code>9e6972d</code> · 선행 <code>fbb67ae</code> 확인<br>실행 환경에서 실제 명령 사용 가능</p></div><span class="status">확인 완료</span></article>
+        <article class="task"><span class="number">03</span><div><h3>백엔드·API 설계와 구현</h3><p>회원가입·로그인·세션과 개인별 데이터 저장 구조<br>다른 계정의 기록에 접근할 수 없도록 권한 경계 준비</p></div><span class="status">진행 중</span></article>
+        <article class="task"><span class="number">04</span><div><h3>프런트엔드 계정 경험</h3><p>가입·로그인·로그아웃과 저장 상태 표시<br>계정과 학습 기록을 이해하기 쉬운 화면으로 연결</p></div><span class="status">진행 중</span></article>
+        <article class="task"><span class="number">05</span><div><h3>기존 로컬 기록 가져오기</h3><p>현재 브라우저의 기록은 사용자가 명시적으로 선택해 가져오기<br>계정 간 데이터 섞임과 중복 가져오기 방지 검토</p></div><span class="status">진행 중</span></article>
+        <article class="task"><span class="number">06</span><div><h3>호스팅 가능성 확인</h3><p>서버·데이터베이스 실행과 배포 환경의 제약 확인<br>운영 가능한 경로와 필요한 설정 정리</p></div><span class="status">진행 중</span></article>
+        <article class="task"><span class="number">07</span><div><h3>독립 계정·기록 QA</h3><p>가입·로그인·로그아웃, 계정별 접근 제한과 기록 유지 검증<br>로컬 기록 가져오기·기존 학습 흐름 회귀 점검</p></div><span class="status pending">검증 대기</span></article>
+        <article class="task"><span class="number">08</span><div><h3>성장과 학습의 연속성</h3><p>기존 영어·일본어 학습과 복습 흐름 보존<br>계정에 쌓이는 학습 진도와 성장 경험 연결</p></div><span class="status">구현 준비</span></article>
       </div>
     </section>
     <div class="bottom">
-      <section class="info"><h2>검증된 기준</h2><p>최종 전체 브라우저 테스트 30/30(기존 18개·문장 세션 12개), 모바일·파비콘 집중 테스트 3/3, 프로덕션 빌드가 모두 통과했습니다. 브라우저 페이지 오류는 0건입니다. 모바일 스크롤·초점·파비콘 수정까지 검증된 소스·테스트 기준 <code>ad6fe53</code>을 GitHub main에 반영했습니다.</p></section>
-      <section class="info"><h2>반드시 유지할 학습 기록</h2><p>아내의 영어 · 남편의 일본어 프로필과 기존 학습 기록을 보존했습니다. 기존 공통 20개 상황마다 영어·일본어 각각 4문장씩, 언어별 80문장·합계 160문장을 작성하고 구조와 콘텐츠를 독립 검토했습니다. 앱 연결과 전체 동작 검증을 완료했고 프로필 분리와 기존 데이터 보존을 유지합니다. 기록은 현재 브라우저의 로컬 저장소에 보관되며 기기 간 동기화는 지원하지 않습니다.</p></section>
-      <section class="info"><h2>음성 기능의 현재 범위</h2><p>음성은 브라우저 TTS와 마이크 ASR 전사 텍스트 비교 방식입니다. 브라우저·기기의 지원과 권한에 따라 달라지며, 실제 음소·억양 평가나 발음 점수 측정, 사람이 녹음한 음성은 구현되지 않았습니다.</p></section>
-      <section class="info"><h2>페이지 읽는 방법</h2><p>이 화면은 파일에 기록된 최신 현황입니다. 자동 새로고침을 켜 두면 20초마다 이후 업데이트를 표시합니다. 완료 표시는 검증된 작업에만 사용합니다.</p></section>
+      <section class="info"><h2>이전 단계에서 확인한 결과</h2><p>문장 중심 영어·일본어 세션의 브라우저 테스트 30/30, 모바일·파비콘 집중 테스트 3/3, 프로덕션 빌드 통과 기록이 있습니다. 이 결과는 이전 학습 기능에 대한 검증이며, 현재 추가하는 회원가입·로그인·서버 기록 기능의 통과 결과가 아닙니다.</p></section>
+      <section class="info"><h2>기록 보호 원칙</h2><p>기존 브라우저의 영어·일본어 프로필과 학습 기록을 보존하는 것이 기준입니다. 새 계정에서는 개인별 비공개 서버 기록을 목표로 합니다. 기존 로컬 기록을 자동으로 계정에 합치지 않고, 사용자가 가져오기를 선택하는 흐름으로 준비합니다.</p></section>
+      <section class="info"><h2>아직 확인하지 않은 사항</h2><p>새 계정 기능의 독립 QA와 실제 호스팅 검증은 대기 중입니다. 이 페이지의 진행 중 표시는 인증, 기기 간 기록 공유 또는 서비스 배포가 완료되었다는 뜻이 아닙니다.</p></section>
+      <section class="info"><h2>페이지 읽는 방법</h2><p>이 화면은 파일에 기록된 최신 현황입니다. 자동 새로고침을 켜 두면 20초마다 이후 업데이트를 표시합니다. 완료 표시는 확인된 작업에만 사용하며, 시간은 미국 로스앤젤레스 기준입니다.</p></section>
     </div>
-    <footer><div>마지막 업데이트 <time datetime="2026-11-13T07:06:05-08:00">2026. 11. 13. 07:06 PST</time></div><label class="refresh"><input id="auto-refresh" type="checkbox" checked>20초마다 자동 새로고침</label></footer>
+    <footer><div>마지막 업데이트 <time datetime="2026-11-13T07:23:02-08:00">2026. 11. 13. 07:23 PST</time> · America/Los_Angeles</div><label class="refresh"><input id="auto-refresh" type="checkbox" checked>20초마다 자동 새로고침</label></footer>
   </main>
   <script>
     (() => {
