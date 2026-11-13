@@ -36,7 +36,10 @@ async function fixture(saved=legacy,viewport={width:1440,height:1000},profiles=n
   return {page,context};
 }
 const state=page=>page.evaluate(()=>JSON.parse(localStorage.getItem('bloom-profiles-v2')));
-const choose=(page,profile)=>page.getByLabel('학습자 선택').selectOption(profile);
+const choose=async(page,profile)=>{
+  if(await page.getByRole('dialog').count())await page.keyboard.press('Escape');
+  await page.getByLabel('학습자 선택').selectOption(profile);
+};
 async function test(name,fn){try{await fn();console.log(`PASS ${name}`);}catch(e){failures++;console.error(`FAIL ${name}\n${e.stack}`);}}
 
 try{
@@ -156,8 +159,10 @@ try{
     assert.deepEqual(stored.learners.husband.learned,['ja-cafe-takeout']);
     assert.ok(Math.abs(stored.learners.husband.reviews['ja-cafe-takeout']-Date.now()-86400000)<3000);
     assert.deepEqual(stored.learners.wife,english);
-    await choose(page,'wife');
-    assert.equal(await page.getByRole('dialog').count(),0,'profile switch closes active lesson');
+    // A programmatic change can still arrive while the selector is inert. Exercise
+    // teardown directly; real users close the dialog before changing profiles.
+    await page.getByLabel('학습자 선택').evaluate(el=>{el.value='wife';el.dispatchEvent(new Event('change',{bubbles:true}));});
+    assert.equal(await page.getByRole('dialog').count(),0,'programmatic profile switch closes active lesson');
     assert.deepEqual((await state(page)).learners.wife,english);
     await page.reload();
     await choose(page,'husband');
@@ -538,6 +543,112 @@ try{
     await page.getByRole('button',{name:'설정 완료'}).click();
     assert.equal((await state(page)).learners.husband.name,'모바일');
     await context.close();
+  });
+  await test('keyboard opens lessons and settings, contains focus, and restores each trigger',async()=>{
+    for(const viewport of [{width:1440,height:1000},{width:390,height:844}]){
+      const {page,context}=await fixture(null,viewport);
+      for(const name of ['설정','오늘의 학습 시작하기']){
+        const trigger=page.getByRole('button',{name,exact:true});
+        await trigger.focus();
+        await page.keyboard.press('Enter');
+        const dialog=page.getByRole('dialog');
+        await dialog.waitFor();
+        assert.ok(await dialog.getByRole('button',{name:'닫기',exact:true}).evaluate(el=>el===document.activeElement),'initial focus lands on close');
+        const controls=dialog.locator('button:not([disabled]):visible, input:not([disabled]):visible, select:not([disabled]):visible, a[href]:visible');
+        const first=controls.first(),last=controls.last();
+        await first.focus();
+        await page.keyboard.press('Shift+Tab');
+        assert.ok(await last.evaluate(el=>el===document.activeElement),'Shift+Tab wraps to final dialog control');
+        await page.keyboard.press('Tab');
+        assert.ok(await first.evaluate(el=>el===document.activeElement),'Tab wraps to first dialog control');
+        for(let i=0;i<await controls.count()+2;i++){
+          await page.keyboard.press('Tab');
+          assert.ok(await dialog.evaluate(el=>el.contains(document.activeElement)),'Tab must never reach the background');
+        }
+        await page.getByLabel('학습자 선택').evaluate(el=>el.focus());
+        assert.ok(await dialog.evaluate(el=>el.contains(document.activeElement)),'background learner selector cannot take focus');
+        await page.keyboard.press('Escape');
+        await dialog.waitFor({state:'detached'});
+        assert.ok(await trigger.evaluate(el=>el===document.activeElement),'Escape restores opener');
+        await page.keyboard.press('Enter');
+        await page.getByRole('dialog').getByRole('button',{name:'닫기',exact:true}).click();
+        assert.ok(await trigger.evaluate(el=>el===document.activeElement),'close restores opener');
+      }
+      await choose(page,'husband');
+      const start=page.getByRole('button',{name:'오늘의 학습 시작하기',exact:true});
+      await start.focus();
+      await page.keyboard.press('Enter');
+      assert.equal(await page.getByRole('dialog').locator('h2 ruby rt').innerText(),'ちゅうもん');
+      await page.keyboard.press('Escape');
+      assert.ok(await start.evaluate(el=>el===document.activeElement),'Japanese lesson restores its opener');
+      await choose(page,'wife');
+      assert.equal((await state(page)).active,'wife');
+      assert.equal(await page.getByRole('dialog').count(),0);
+      await context.close();
+    }
+  });
+  await test('lesson completion keeps focus inside and restores an opener or surviving navigation',async()=>{
+    const {page,context}=await fixture();
+    await page.getByRole('button',{name:'복습 노트',exact:true}).click();
+    const review=page.getByRole('button',{name:'복습 시작하기',exact:true});
+    await review.focus();
+    await page.keyboard.press('Enter');
+    await page.getByRole('dialog').getByRole('button',{name:/뜻 확인하기/}).click();
+    await page.getByRole('dialog').getByRole('button',{name:'기억했어요',exact:true}).click();
+    const complete=page.getByRole('dialog',{name:'완료'});
+    await complete.waitFor();
+    assert.ok(await complete.evaluate(el=>el.contains(document.activeElement)),'completion transition refocuses inside dialog');
+    await page.keyboard.press('Shift+Tab');
+    assert.ok(await complete.getByRole('button',{name:'나의 단어장 보기'}).evaluate(el=>el===document.activeElement),'completion focus wraps backwards');
+    await page.keyboard.press('Tab');
+    assert.ok(await complete.getByRole('button',{name:'닫기',exact:true}).evaluate(el=>el===document.activeElement),'completion focus wraps forwards');
+    await page.keyboard.press('Escape');
+    assert.ok(await page.getByRole('button',{name:'새 단어 배우기',exact:true}).evaluate(el=>el===document.activeElement),'completion Escape restores original review button');
+    await page.getByRole('button',{name:'홈',exact:true}).click();
+    const start=page.getByRole('button',{name:'오늘의 학습 시작하기',exact:true});
+    await start.focus();
+    await page.keyboard.press('Enter');
+    for(let i=0;i<5;i++){
+      await page.getByRole('dialog').getByRole('button',{name:/뜻 확인하기/}).click();
+      await page.getByRole('dialog').getByRole('button',{name:'기억했어요',exact:true}).click();
+    }
+    await page.getByRole('dialog',{name:'완료'}).getByRole('button',{name:'나의 단어장 보기'}).click();
+    assert.equal(await page.getByRole('dialog').count(),0);
+    assert.ok(await page.getByRole('button',{name:'복습 노트',exact:true}).evaluate(el=>el===document.activeElement),'removed home opener falls back to current navigation');
+    await choose(page,'husband');
+    assert.equal((await state(page)).active,'husband');
+    await context.close();
+  });
+  await test('audited secondary text meets 4.5:1 contrast on rendered desktop and mobile backgrounds',async()=>{
+    for(const viewport of [{width:1440,height:1000},{width:390,height:844}]){
+      const {page,context}=await fixture(null,viewport);
+      for(const learner of ['wife','husband']){
+        await choose(page,learner);
+        for(const selector of ['.stat-top > span:last-child','.stat > p','.course-info > p','.text-button']){
+          const ratios=await page.locator(selector).evaluateAll(elements=>{
+            const rgba=color=>color.match(/[\d.]+/g).map(Number);
+            const over=(front,back)=>front.slice(0,3).map((value,i)=>value*(front[3]??1)+back[i]*(1-(front[3]??1)));
+            const luminance=rgb=>rgb.map(v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4;}).reduce((sum,v,i)=>sum+v*[.2126,.7152,.0722][i],0);
+            return elements.map(el=>{
+              const ancestors=[];for(let node=el;node;node=node.parentElement)ancestors.unshift(node);
+              let background=[255,255,255];
+              for(const ancestor of ancestors){
+                const style=getComputedStyle(ancestor);
+                if(style.backgroundImage!=='none')throw Error('Contrast fixture needs an explicit sample for image/gradient backgrounds');
+                if(style.opacity!=='1')throw Error('Contrast fixture needs opacity compositing');
+                background=over(rgba(style.backgroundColor),background);
+              }
+              const foreground=over(rgba(getComputedStyle(el).color),background);
+              const values=[luminance(foreground),luminance(background)].sort((a,b)=>a-b);
+              return {text:el.textContent,ratio:(values[1]+.05)/(values[0]+.05),background};
+            });
+          });
+          assert.ok(ratios.length>0,`missing audited selector ${selector}`);
+          for(const sample of ratios)assert.ok(sample.ratio>=4.5,`${viewport.width}px ${learner} ${selector} ${sample.text}: ${sample.ratio.toFixed(2)}:1 against ${sample.background}`);
+        }
+      }
+      await context.close();
+    }
   });
   assert.deepEqual(errors,[],'no uncaught browser errors');
 }finally{
