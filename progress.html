@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Bloom · 작업 진행 현황</title>
+  <style>
+    :root{--ink:#213a32;--muted:#62776d;--line:#dce6df;--paper:#fbfcf9;--green:#2e6953;--tint:#edf4ee;--amber:#97621b}
+    *{box-sizing:border-box}body{margin:0;background:#f0f3ed;color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.6}main{max-width:1080px;margin:0 auto;padding:52px 28px 30px}header{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;margin-bottom:34px}.brand{font-size:13px;font-weight:750;letter-spacing:.16em;color:var(--green)}h1{font-size:clamp(30px,5vw,46px);letter-spacing:-.055em;line-height:1.25;margin:14px 0}p{margin:0}.intro{max-width:620px;color:var(--muted)}.live{display:inline-flex;gap:8px;align-items:center;padding:7px 12px;background:#e1eddf;border:1px solid #ccdcca;border-radius:30px;white-space:nowrap;font-size:12px;font-weight:700}.dot{width:7px;height:7px;border-radius:50%;background:#40845a}.hero{background:var(--ink);color:#f8fbf5;border-radius:22px;padding:30px 32px;display:grid;grid-template-columns:1.7fr 1fr;gap:36px}.eyebrow{font-size:12px;letter-spacing:.08em;color:#b9d3c2}.hero h2{font-size:30px;letter-spacing:-.04em;margin:7px 0 10px}.hero p{color:#c6d8cc;font-size:14px}.hero-side{border-left:1px solid #557166;padding-left:30px;display:flex;flex-direction:column;justify-content:center;gap:8px}.hero-side strong{font-size:22px}.hero-side small{color:#c6d8cc}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:18px 0 34px}.stat{padding:20px 23px;border:1px solid var(--line);background:var(--paper);border-radius:15px}.label{color:var(--muted);font-size:12px}.value{font-weight:700;font-size:22px;margin-top:4px}.value code{font-size:20px}.note{font-size:12px;color:var(--muted);margin-top:4px}.section-title{display:flex;align-items:baseline;justify-content:space-between;gap:14px;margin-bottom:14px}h2{font-size:19px;letter-spacing:-.03em;margin:0}.section-title span{font-size:12px;color:var(--muted)}.panel{background:var(--paper);border:1px solid var(--line);border-radius:18px;overflow:hidden}.task{display:grid;grid-template-columns:40px 1fr 110px;gap:13px;align-items:center;padding:20px 24px;border-bottom:1px solid var(--line)}.task:last-child{border:0}.number{font-size:12px;color:#829388;font-variant-numeric:tabular-nums}.task h3{font-size:15px;margin:0 0 3px}.task p{font-size:13px;color:var(--muted)}.task code{font-size:11px;color:#71877b}.status{justify-self:end;display:inline-block;text-align:center;font-size:12px;font-weight:650;padding:5px 11px;border-radius:7px;background:var(--tint);color:var(--green)}.status.pending{background:#f0f0e9;color:#787a69}.bottom{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:24px}.info{border-top:1px solid #cdd9ce;padding:18px 2px}.info h2{font-size:14px;margin-bottom:8px}.info p{font-size:13px;color:var(--muted)}footer{display:flex;justify-content:space-between;gap:15px;align-items:center;margin-top:30px;padding-top:20px;border-top:1px solid #d8e2d8;color:var(--muted);font-size:12px}.refresh{display:flex;align-items:center;gap:7px;cursor:pointer}input{accent-color:var(--green);width:15px;height:15px}code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}a{color:var(--green)}:focus-visible{outline:3px solid #a27934;outline-offset:4px}@media(max-width:640px){main{padding:30px 18px}header{gap:12px}.hero{padding:24px;grid-template-columns:1fr;gap:22px}.hero-side{border-left:0;border-top:1px solid #557166;padding:18px 0 0}.stats{gap:8px}.stat{padding:15px 12px}.value,.value code{font-size:19px}.task{grid-template-columns:23px 1fr 65px;gap:8px;padding:17px 15px}.status{padding:4px 7px}.bottom{grid-template-columns:1fr;gap:0}footer{align-items:flex-start;flex-direction:column}.section-title{align-items:flex-start;flex-direction:column;gap:3px}.live{font-size:11px;padding:6px 9px}}
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div><div class="brand">BLOOM / WORK LOG</div><h1>작업의 흐름을 한눈에.</h1><p class="intro">Bloom의 검토와 개선 진행 상황을 모아 둔 페이지입니다.<br>확인된 기준과 현재 작업, 다음 단계를 구분해 보여드립니다.</p></div>
+      <span class="live"><span class="dot" aria-hidden="true"></span>작업 진행 중</span>
+    </header>
+    <section class="hero" aria-labelledby="current-phase">
+      <div><div class="eyebrow">CURRENT PHASE</div><h2 id="current-phase">마무리 검토</h2><p>데이터 · 학습 흐름 · 사용 경험을 살펴보고 있습니다.<br>검토 결과가 확정되면 개선과 QA 단계에 반영합니다.</p></div>
+      <div class="hero-side"><div class="eyebrow">UP NEXT</div><strong>개선 구현 → QA</strong><small>검토 결과 정리 후 진행 예정</small></div>
+    </section>
+    <section class="stats" aria-label="확인된 작업 기준">
+      <div class="stat"><div class="label">기준 브랜치</div><div class="value">main</div><div class="note">검토 시작 기준</div></div>
+      <div class="stat"><div class="label">최근 확인 커밋</div><div class="value"><code>c6512b1</code></div><div class="note">새 변경은 아직 미반영</div></div>
+      <div class="stat"><div class="label">기준 테스트</div><div class="value">12 / 12</div><div class="note">기존 테스트 통과 기준</div></div>
+    </section>
+    <section aria-labelledby="work-title">
+      <div class="section-title"><h2 id="work-title">진행 중인 작업</h2><span>진행률 대신 실제 작업 상태를 표시합니다</span></div>
+      <div class="panel">
+        <article class="task"><span class="number">01</span><div><h3>데이터 검토 <code>data_audit</code></h3><p>데이터 구조와 저장 흐름 확인</p></div><span class="status">진행 중</span></article>
+        <article class="task"><span class="number">02</span><div><h3>학습 흐름 검토 <code>learning_audit</code></h3><p>학습과 복습 동작의 일관성 확인</p></div><span class="status">진행 중</span></article>
+        <article class="task"><span class="number">03</span><div><h3>사용 경험 검토 <code>ux_audit</code></h3><p>화면과 상호작용의 사용성 확인</p></div><span class="status">진행 중</span></article>
+        <article class="task"><span class="number">04</span><div><h3>진행 현황 페이지 <code>progress_html</code></h3><p>이 페이지 구성 및 작업 상태 업데이트</p></div><span class="status">진행 중</span></article>
+        <article class="task"><span class="number">05</span><div><h3>개선 구현 · QA</h3><p>검토 결과 반영 후 동작과 회귀 확인</p></div><span class="status pending">대기</span></article>
+      </div>
+    </section>
+    <div class="bottom">
+      <section class="info"><h2>현재 확인된 내용</h2><p>시작 기준은 <code>main · c6512b1</code>이며, 기준 테스트는 12개 모두 통과한 상태입니다. 새로운 검토 결과는 아직 확정되지 않았습니다.</p></section>
+      <section class="info"><h2>페이지 읽는 방법</h2><p>이 화면은 파일에 기록된 최신 현황입니다. 자동 새로고침을 켜 두면 20초마다 파일을 다시 열어 이후 업데이트를 표시합니다.</p></section>
+    </div>
+    <footer><div>마지막 업데이트 <time datetime="2026-11-13T02:41:00Z">2026. 11. 13. 02:41 UTC</time></div><label class="refresh"><input id="auto-refresh" type="checkbox" checked>20초마다 자동 새로고침</label></footer>
+  </main>
+  <script>
+    (() => {
+      const checkbox = document.getElementById('auto-refresh');
+      try { checkbox.checked = sessionStorage.getItem('bloom-progress-refresh') !== 'off'; } catch (_) {}
+      checkbox.addEventListener('change', () => {
+        try { sessionStorage.setItem('bloom-progress-refresh', checkbox.checked ? 'on' : 'off'); } catch (_) {}
+      });
+      setInterval(() => { if (checkbox.checked && !document.hidden) location.reload(); }, 20000);
+    })();
+  </script>
+</body>
+</html>
