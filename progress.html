@@ -17,13 +17,13 @@
       <span class="live"><span class="dot" aria-hidden="true"></span>작업 진행 중</span>
     </header>
     <section class="hero" aria-labelledby="current-phase">
-      <div><div class="eyebrow">CURRENT PHASE</div><h2 id="current-phase">접근성 검증</h2><p>모달 초점 관리와 작은 글자 대비를 수정하고 빌드를 확인했습니다.<br>독립 테스트를 다시 실행하며 GitHub의 Grok 분석 자료를 찾고 있습니다.</p></div>
-      <div class="hero-side"><div class="eyebrow">UP NEXT</div><strong>인사 표현 교정 → 최종 QA</strong><small>접근성 검증과 외부 분석 자료 확인 후 진행 예정</small></div>
+      <div><div class="eyebrow">CURRENT PHASE</div><h2 id="current-phase">문장 세션 설계</h2><p>사용자가 전달한 6단계 문장 세션 분석을 설계에 반영합니다.<br>기존 학습 기록을 보존하며 문장 단위 학습과 복습 흐름을 준비합니다.</p></div>
+      <div class="hero-side"><div class="eyebrow">UP NEXT</div><strong>스키마 → 세션 플레이어</strong><small>오답 문장 익일 복습 → 콘텐츠 확장 · QA</small></div>
     </section>
     <section class="stats" aria-label="확인된 작업 기준">
-      <div class="stat"><div class="label">원격 반영</div><div class="value">기록 보호 완료</div><div class="note">검증된 수정과 테스트 반영 완료</div></div>
-      <div class="stat"><div class="label">검증된 테스트 커밋</div><div class="value"><code>a3749d2</code></div><div class="note">검토 완료 · 원격 반영됨</div></div>
-      <div class="stat"><div class="label">검증 완료 테스트 기준</div><div class="value">16 / 16</div><div class="note">기록 보호 단계 기준 · 접근성 테스트 재실행 중</div></div>
+      <div class="stat"><div class="label">원격 반영</div><div class="value">기록 보호 · 접근성</div><div class="note">수정 · 독립 테스트 검증 및 반영 완료</div></div>
+      <div class="stat"><div class="label">검증된 접근성 테스트</div><div class="value"><code>1eff48f</code></div><div class="note">검토 완료 · 원격 반영됨</div></div>
+      <div class="stat"><div class="label">검증 완료 테스트 기준</div><div class="value">18 / 18</div><div class="note">전체 브라우저 테스트 통과 · 빌드 통과</div></div>
     </section>
     <section aria-labelledby="work-title">
       <div class="section-title"><h2 id="work-title">진행 중인 작업</h2><span>진행률 대신 실제 작업 상태를 표시합니다</span></div>
@@ -33,18 +33,22 @@
         <article class="task"><span class="number">03</span><div><h3>사용 경험 검토 <code>ux_audit</code></h3><p>P2 · 모달 밖으로 키보드 초점 이동 가능<br>P2 · 작은 글자의 명암 대비 개선 필요</p></div><span class="status">검토 완료</span></article>
         <article class="task"><span class="number">04</span><div><h3>기록 보호 수정</h3><p>v2 데이터 검증과 저장 실패 시 기록 보존 · <code>3c71166</code></p></div><span class="status">완료</span></article>
         <article class="task"><span class="number">05</span><div><h3>독립 테스트</h3><p>데이터 오류와 저장 실패 사례 검증 · <code>a3749d2</code></p></div><span class="status">완료</span></article>
-        <article class="task"><span class="number">06</span><div><h3>키보드 접근성 검증</h3><p>구현 <code>6e309fc</code> · 빌드 통과<br>테스트 세션 종료 후 독립 테스트 재실행 중</p></div><span class="status">검증 중</span></article>
-        <article class="task"><span class="number">07</span><div><h3>학습 콘텐츠 수정</h3><p>일본어 인사에 답하는 표현 교정</p></div><span class="status pending">대기</span></article>
-        <article class="task"><span class="number">08</span><div><h3>최종 QA</h3><p>수정 완료 후 전체 동작과 회귀 확인</p></div><span class="status pending">대기</span></article>
-        <article class="task"><span class="number">09</span><div><h3>Grok 분석 자료 <code>grok_report_review</code></h3><p>사용자가 알린 GitHub 분석 자료 검색 · 내용은 아직 미확인</p></div><span class="status">자료 확인 중</span></article>
-        <article class="task"><span class="number">10</span><div><h3>진행 현황 페이지 <code>progress_html</code></h3><p>접근성 검증 및 외부 자료 확인 상태 반영</p></div><span class="status">갱신 중</span></article>
+        <article class="task"><span class="number">06</span><div><h3>키보드 접근성 검증</h3><p>구현 <code>6e309fc</code> · 테스트 <code>1eff48f</code><br>모달 초점 관리 · 글자 대비 수정 및 원격 반영</p></div><span class="status">완료</span></article>
+        <article class="task"><span class="number">07</span><div><h3>문장 세션 설계 · 스키마</h3><p>사용자 제공 6단계 분석 반영 · 기존 데이터와 호환되는 문장 단위 구조 설계</p></div><span class="status">진행 중</span></article>
+        <article class="task"><span class="number">08</span><div><h3>Issue #2 · Grok 분석 검토 <code>grok_report_review</code></h3><p>GitHub 자료와 사용자 분석을 확인하며 구현 우선순위 정리</p></div><span class="status">검토 중</span></article>
+        <article class="task"><span class="number">09</span><div><h3>전체 화면 세션 플레이어 · 음성 인식</h3><p>첫 버전은 마이크 전사와 정답 문장 간 텍스트 차이 표시<br>음소·억양 점수화는 후속 단계</p></div><span class="status pending">다음 단계</span></article>
+        <article class="task"><span class="number">10</span><div><h3>오답 문장 익일 복습 큐</h3><p>틀린 문장만 다음 날 다시 학습하는 문장 단위 큐</p></div><span class="status pending">대기</span></article>
+        <article class="task"><span class="number">11</span><div><h3>콘텐츠 확장 · 표현 및 제목 교정</h3><p>일본어 답인사와 브라우저 제목 수정 포함<br>20개 시나리오와 콘텐츠 확장은 아직 구현 전</p></div><span class="status pending">대기</span></article>
+        <article class="task"><span class="number">12</span><div><h3>최종 QA</h3><p>문장 세션 · 복습 · 기존 데이터 호환성과 전체 회귀 확인</p></div><span class="status pending">대기</span></article>
+        <article class="task"><span class="number">13</span><div><h3>진행 현황 페이지 <code>progress_html</code></h3><p>새 문장 세션 우선순위와 검증된 기준 반영</p></div><span class="status">갱신 중</span></article>
       </div>
     </section>
     <div class="bottom">
-      <section class="info"><h2>현재 확인된 내용</h2><p>기록 보호 수정 <code>3c71166</code>과 테스트 <code>a3749d2</code>는 검증·원격 반영 완료이며, 당시 전체 테스트는 16/16입니다. 접근성 구현 <code>6e309fc</code>는 빌드가 통과했고 독립 테스트를 재실행 중입니다. 새 테스트 결과와 Grok 분석 내용은 확인 후 반영합니다. 시작 기준: <code>c6512b1</code> · 12/12.</p></section>
-      <section class="info"><h2>페이지 읽는 방법</h2><p>이 화면은 파일에 기록된 최신 현황입니다. 자동 새로고침을 켜 두면 20초마다 파일을 다시 열어 이후 업데이트를 표시합니다.</p></section>
+      <section class="info"><h2>검증된 기준</h2><p>기록 보호와 접근성 수정은 원격 반영 완료입니다. 접근성 구현 <code>6e309fc</code>와 독립 테스트 <code>1eff48f</code> 기준 전체 브라우저 테스트 18/18 및 빌드가 통과했습니다. 새 문장 세션은 설계 단계입니다.</p></section>
+      <section class="info"><h2>반드시 유지할 학습 기록</h2><p>아내의 영어 · 남편의 일본어 프로필과 기존 학습 데이터는 보존합니다. 우선순위는 스키마 → 전체 화면 플레이어·음성 전사 비교 → 오답 문장 익일 복습 → 콘텐츠 확장·QA입니다.</p></section>
+      <section class="info"><h2>페이지 읽는 방법</h2><p>이 화면은 파일에 기록된 최신 현황입니다. 자동 새로고침을 켜 두면 20초마다 이후 업데이트를 표시합니다. 완료 표시는 검증된 작업에만 사용합니다.</p></section>
     </div>
-    <footer><div>마지막 업데이트 <time datetime="2026-11-12T23:02:54-08:00">2026. 11. 12. 23:02 PST</time></div><label class="refresh"><input id="auto-refresh" type="checkbox" checked>20초마다 자동 새로고침</label></footer>
+    <footer><div>마지막 업데이트 <time datetime="2026-11-12T23:04:49-08:00">2026. 11. 12. 23:04 PST</time></div><label class="refresh"><input id="auto-refresh" type="checkbox" checked>20초마다 자동 새로고침</label></footer>
   </main>
   <script>
     (() => {
