@@ -17,29 +17,32 @@
       <span class="live"><span class="dot" aria-hidden="true"></span>작업 진행 중</span>
     </header>
     <section class="hero" aria-labelledby="current-phase">
-      <div><div class="eyebrow">CURRENT PHASE</div><h2 id="current-phase">마무리 검토</h2><p>데이터 · 학습 흐름 · 사용 경험을 살펴보고 있습니다.<br>검토 결과가 확정되면 개선과 QA 단계에 반영합니다.</p></div>
-      <div class="hero-side"><div class="eyebrow">UP NEXT</div><strong>개선 구현 → QA</strong><small>검토 결과 정리 후 진행 예정</small></div>
+      <div><div class="eyebrow">CURRENT PHASE</div><h2 id="current-phase">기록 보호 수정</h2><p>데이터 · 학습 흐름 · 사용 경험 검토를 완료했습니다.<br>학습 기록 보호를 먼저 수정하고 독립 테스트로 확인합니다.</p></div>
+      <div class="hero-side"><div class="eyebrow">UP NEXT</div><strong>UX · 콘텐츠 개선 → QA</strong><small>기록 보호 수정과 테스트 후 진행 예정</small></div>
     </section>
     <section class="stats" aria-label="확인된 작업 기준">
       <div class="stat"><div class="label">기준 브랜치</div><div class="value">main</div><div class="note">검토 시작 기준</div></div>
-      <div class="stat"><div class="label">최근 확인 커밋</div><div class="value"><code>c6512b1</code></div><div class="note">새 변경은 아직 미반영</div></div>
+      <div class="stat"><div class="label">최근 확인 커밋</div><div class="value"><code>c6512b1</code></div><div class="note">검증된 main 기준 · 로컬 변경 미포함</div></div>
       <div class="stat"><div class="label">기준 테스트</div><div class="value">12 / 12</div><div class="note">기존 테스트 통과 기준</div></div>
     </section>
     <section aria-labelledby="work-title">
       <div class="section-title"><h2 id="work-title">진행 중인 작업</h2><span>진행률 대신 실제 작업 상태를 표시합니다</span></div>
       <div class="panel">
-        <article class="task"><span class="number">01</span><div><h3>데이터 검토 <code>data_audit</code></h3><p>데이터 구조와 저장 흐름 확인</p></div><span class="status">진행 중</span></article>
-        <article class="task"><span class="number">02</span><div><h3>학습 흐름 검토 <code>learning_audit</code></h3><p>학습과 복습 동작의 일관성 확인</p></div><span class="status">진행 중</span></article>
-        <article class="task"><span class="number">03</span><div><h3>사용 경험 검토 <code>ux_audit</code></h3><p>화면과 상호작용의 사용성 확인</p></div><span class="status">진행 중</span></article>
-        <article class="task"><span class="number">04</span><div><h3>진행 현황 페이지 <code>progress_html</code></h3><p>이 페이지 구성 및 작업 상태 업데이트</p></div><span class="status">진행 중</span></article>
-        <article class="task"><span class="number">05</span><div><h3>개선 구현 · QA</h3><p>검토 결과 반영 후 동작과 회귀 확인</p></div><span class="status pending">대기</span></article>
+        <article class="task"><span class="number">01</span><div><h3>데이터 검토 <code>data_audit</code></h3><p>P1 · 잘못된 v2 필드 타입으로 실행 오류 발생<br>P2 · 저장 실패 후 후속 처리에서 로컬 기록 유실 가능</p></div><span class="status">검토 완료</span></article>
+        <article class="task"><span class="number">02</span><div><h3>학습 흐름 검토 <code>learning_audit</code></h3><p>P2 · 일본어 인사에 답하는 표현 교정 필요</p></div><span class="status">검토 완료</span></article>
+        <article class="task"><span class="number">03</span><div><h3>사용 경험 검토 <code>ux_audit</code></h3><p>P2 · 모달 밖으로 키보드 초점 이동 가능<br>P2 · 작은 글자의 명암 대비 개선 필요</p></div><span class="status">검토 완료</span></article>
+        <article class="task"><span class="number">04</span><div><h3>기록 보호 수정</h3><p>v2 데이터 검증과 저장 실패 시 기록 보존 처리</p></div><span class="status">진행 중</span></article>
+        <article class="task"><span class="number">05</span><div><h3>독립 테스트</h3><p>데이터 오류와 저장 실패 사례를 별도로 검증</p></div><span class="status">진행 중</span></article>
+        <article class="task"><span class="number">06</span><div><h3>UX · 학습 콘텐츠 수정</h3><p>초점 관리 · 글자 대비 · 일본어 인사 표현 개선</p></div><span class="status pending">대기</span></article>
+        <article class="task"><span class="number">07</span><div><h3>최종 QA</h3><p>수정 완료 후 전체 동작과 회귀 확인</p></div><span class="status pending">대기</span></article>
+        <article class="task"><span class="number">08</span><div><h3>진행 현황 페이지 <code>progress_html</code></h3><p>1차 검토 결과 반영 · 작업에 맞춰 계속 업데이트</p></div><span class="status">갱신 중</span></article>
       </div>
     </section>
     <div class="bottom">
-      <section class="info"><h2>현재 확인된 내용</h2><p>시작 기준은 <code>main · c6512b1</code>이며, 기준 테스트는 12개 모두 통과한 상태입니다. 새로운 검토 결과는 아직 확정되지 않았습니다.</p></section>
+      <section class="info"><h2>현재 확인된 내용</h2><p>검증된 main은 <code>c6512b1</code>, 기존 테스트 기준은 12/12입니다. 위 항목은 검토 결과이며, 수정 완료나 새 테스트 통과를 뜻하지 않습니다. P1은 우선 수정, P2는 후속 개선 항목입니다.</p></section>
       <section class="info"><h2>페이지 읽는 방법</h2><p>이 화면은 파일에 기록된 최신 현황입니다. 자동 새로고침을 켜 두면 20초마다 파일을 다시 열어 이후 업데이트를 표시합니다.</p></section>
     </div>
-    <footer><div>마지막 업데이트 <time datetime="2026-11-13T02:41:00Z">2026. 11. 13. 02:41 UTC</time></div><label class="refresh"><input id="auto-refresh" type="checkbox" checked>20초마다 자동 새로고침</label></footer>
+    <footer><div>마지막 업데이트 <time datetime="2026-11-12T18:43:23-08:00">2026. 11. 12. 18:43 PST</time></div><label class="refresh"><input id="auto-refresh" type="checkbox" checked>20초마다 자동 새로고침</label></footer>
   </main>
   <script>
     (() => {
