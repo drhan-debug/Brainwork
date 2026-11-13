@@ -1,4 +1,4 @@
-import { mkdir, readFile, copyFile, stat } from 'node:fs/promises';
+import { mkdir, readFile, stat } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -11,11 +11,10 @@ const workerPath = resolve(root, 'dist/server/index.js');
 await stat(workerPath);
 const worker = await import(pathToFileURL(workerPath));
 if (typeof worker.default?.fetch !== 'function') throw new Error('Worker must default-export fetch.');
-await mkdir(resolve(root, 'dist/.openai'), { recursive: true });
-await copyFile(manifestPath, resolve(root, 'dist/.openai/hosting.json'));
 const archivePath = resolve(process.argv[2] || resolve(root, 'outputs/bloom-deploy.tar.gz'));
 await mkdir(dirname(archivePath), { recursive: true });
-const result = spawnSync('tar', ['-czf', archivePath, '-C', resolve(root, 'dist'), '.'], { stdio: 'inherit' });
+// Sites resolves Worker entrypoints relative to the archive root.
+const result = spawnSync('tar', ['-czf', archivePath, '-C', root, '.openai/hosting.json', 'dist'], { stdio: 'inherit' });
 if (result.error) throw result.error;
 if (result.status !== 0) process.exit(result.status || 1);
 console.log(JSON.stringify({ project_id: manifest.project_id, archive: archivePath }));
