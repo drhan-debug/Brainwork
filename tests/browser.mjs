@@ -16,6 +16,7 @@ let failures=0;
 const legacy={learned:['Bloom','Reservation'],reviews:{Bloom:Date.now()-60000,Reservation:Date.now()+86400000},sessions:7,minutes:42.5,name:'기존 학습자',goal:20,dates:['2026-11-12'],dailyMinutes:{'2026-11-12':5.5}};
 async function fixture(saved=legacy,viewport={width:1440,height:1000}) {
   const context=await browser.newContext({viewport});
+  context.setDefaultTimeout(10000);
   await context.addInitScript(({saved})=>{
     if(!localStorage.getItem('test-seeded')){
       localStorage.clear();
@@ -207,6 +208,131 @@ try{
     const data=(await state(page)).learners.husband;
     assert.equal(data.reviewStages['ja-cafe-order'],0);
     assert.ok(Math.abs(data.reviews['ja-cafe-order']-Date.now()-600000)<3000);
+    await context.close();
+  });
+  await test('early learning and rehearsal preserve future schedules, including legacy English timestamps',async()=>{
+    const future=Date.now()+7*86400000;
+    const {page,context}=await fixture({...legacy,learned:['Serendipity'],reviews:{Serendipity:future}});
+    // A migrated timestamp has no stage yet: early practice must not invent one.
+    for(const mode of ['오늘의 학습 시작하기','듣고 따라 말하기','문장 떠올리기']){
+      await page.getByRole('button',{name:new RegExp(mode)}).click();
+      const dialog=page.getByRole('dialog');
+      if(mode==='오늘의 학습 시작하기')await dialog.getByRole('button',{name:/뜻 확인하기/}).click();
+      else {
+        await dialog.getByLabel('문장 입력 연습').fill('Finding this little café was pure serendipity.');
+        await dialog.getByRole('button',{name:'문장 확인',exact:true}).click();
+      }
+      await dialog.getByRole('button',{name:'기억했어요'}).click();
+      const data=(await state(page)).learners.wife;
+      assert.equal(data.reviews.Serendipity,future,`${mode}: original English timestamp`);
+      assert.equal(data.reviewStages.Serendipity,undefined,`${mode}: absent legacy stage`);
+      await dialog.getByRole('button',{name:'닫기',exact:true}).click();
+    }
+    assert.deepEqual(await page.evaluate(()=>JSON.parse(localStorage.getItem('bloom-state')).reviews),{Serendipity:future});
+    await choose(page,'husband');
+    await page.evaluate(({future})=>{
+      const s=JSON.parse(localStorage.getItem('bloom-profiles-v2'));
+      s.learners.husband.learned=['ja-cafe-order'];
+      s.learners.husband.reviews={'ja-cafe-order':future};
+      s.learners.husband.reviewStages={'ja-cafe-order':3};
+      localStorage.setItem('bloom-profiles-v2',JSON.stringify(s));
+    },{future});
+    await page.reload();
+    for(const mode of ['오늘의 학습 시작하기','듣고 따라 말하기','문장 떠올리기']){
+      await page.getByRole('button',{name:new RegExp(mode)}).click();
+      const dialog=page.getByRole('dialog');
+      if(mode==='오늘의 학습 시작하기')await dialog.getByRole('button',{name:/뜻 확인하기/}).click();
+      else {
+        await dialog.getByLabel('문장 입력 연습').fill('コーヒーを一つください。');
+        await dialog.getByRole('button',{name:'문장 확인',exact:true}).click();
+      }
+      await dialog.getByRole('button',{name:'기억했어요'}).click();
+      const data=(await state(page)).learners.husband;
+      assert.equal(data.reviews['ja-cafe-order'],future,`${mode}: future due`);
+      assert.equal(data.reviewStages['ja-cafe-order'],3,`${mode}: stage`);
+      await dialog.getByRole('button',{name:'닫기',exact:true}).click();
+    }
+    // Even before due, explicitly marking a scheduled word difficult resets it.
+    await page.getByRole('button',{name:'오늘의 학습 시작하기'}).click();
+    await page.getByRole('button',{name:/뜻 확인하기/}).click();
+    const before=Date.now();
+    await page.getByRole('button',{name:'다시 볼게요'}).click();
+    const reset=(await state(page)).learners.husband;
+    assert.equal(reset.reviewStages['ja-cafe-order'],0);
+    assert.ok(Math.abs(reset.reviews['ja-cafe-order']-before-600000)<3000);
+    await page.reload();
+    assert.equal((await state(page)).learners.husband.reviews['ja-cafe-order'],reset.reviews['ja-cafe-order']);
+    await context.close();
+  });
+  await test('two learner tabs retain sequential settings, progress and switches and synchronize visible stats',async()=>{
+    const {page:english,context}=await fixture(null);
+    const japanese=await context.newPage();
+    japanese.on('pageerror',error=>errors.push(error.message));
+    await japanese.goto(base);
+    await choose(japanese,'husband');
+    assert.equal(await english.getByLabel('학습자 선택').inputValue(),'wife','another tab keeps its selected learner');
+    async function settings(page,name,goal){
+      await page.bringToFront();
+      await page.getByRole('button',{name:'설정',exact:true}).click();
+      await page.getByLabel('이름',{exact:true}).fill(name);
+      await page.getByLabel('하루 학습 목표').selectOption(goal);
+      await page.getByRole('button',{name:'설정 완료'}).click();
+    }
+    async function learnFirst(page){
+      await page.bringToFront();
+      await page.getByRole('button',{name:'오늘의 학습 시작하기'}).click();
+      await page.getByRole('button',{name:/뜻 확인하기/}).click();
+      await page.getByRole('button',{name:'기억했어요'}).click();
+      await page.getByRole('button',{name:'닫기',exact:true}).click();
+    }
+    await settings(english,'English tab','20');
+    await learnFirst(english);
+    await english.getByRole('button',{name:/짧은 대화/}).click();
+    for(const [i,answer] of ['A coffee, please.','To go, please.','That is all, thank you.'].entries()){
+      await english.getByLabel('나의 대답').fill(answer);
+      await english.getByRole('button',{name:'문장 확인',exact:true}).click();
+      await english.getByRole('button',{name:i===2?'대화 마치기':'다음 대화',exact:true}).click();
+    }
+    await english.getByRole('button',{name:'닫기',exact:true}).click();
+    await settings(japanese,'Japanese tab','5');
+    assert.equal(await english.getByLabel('학습자 선택').inputValue(),'wife');
+    assert.equal(await japanese.getByLabel('학습자 선택').inputValue(),'husband');
+    await learnFirst(japanese);
+    let saved=await state(english);
+    assert.equal(saved.learners.wife.name,'English tab');
+    assert.equal(saved.learners.wife.goal,20);
+    assert.deepEqual(saved.learners.wife.learned,['Serendipity']);
+    assert.equal(saved.learners.wife.sessions,1,'other tab settings preserve completed sessions');
+    assert.equal(saved.learners.husband.name,'Japanese tab');
+    assert.equal(saved.learners.husband.goal,5);
+    assert.deepEqual(saved.learners.husband.learned,['ja-cafe-order']);
+    const expected=structuredClone(saved.learners);
+    await choose(english,'husband');
+    await choose(japanese,'wife');
+    assert.deepEqual((await state(english)).learners,expected,'switching must not write stale learner snapshots');
+    // Both pages now display the same learner; the inactive page must update without reload.
+    await choose(japanese,'husband');
+    await settings(japanese,'Updated tab','20');
+    await english.getByRole('heading',{name:'안녕하세요, Updated tab님 ☀'}).waitFor();
+    await japanese.getByRole('button',{name:/카페에서 주문하기/}).click();
+    const dialog=japanese.getByRole('dialog');
+    // First card is already scheduled; advance to the next one before learning it.
+    for(let i=0;i<2;i++){
+      await dialog.getByRole('button',{name:/뜻 확인하기/}).click();
+      await dialog.getByRole('button',{name:'기억했어요'}).click();
+    }
+    const learnedStat=english.locator('.stat').filter({hasText:'기억한 단어'});
+    await learnedStat.locator('.stat-value').filter({hasText:/^2개$/}).waitFor();
+    saved=await state(english);
+    assert.deepEqual(saved.learners.wife,expected.wife);
+    assert.equal(saved.learners.husband.name,'Updated tab');
+    assert.equal(saved.learners.husband.goal,20);
+    assert.deepEqual(saved.learners.husband.learned,['ja-cafe-order','ja-cafe-takeout']);
+    for(const page of [english,japanese]){
+      await page.reload();
+      await page.getByLabel('학습자 선택').waitFor();
+      assert.deepEqual((await state(page)).learners,saved.learners,'both records survive reload');
+    }
     await context.close();
   });
   await test('English course continuity, en-US speech, and Japanese course switching',async()=>{
