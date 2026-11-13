@@ -1,4 +1,4 @@
-import React, {useState, useEffect, useRef} from 'react';
+import React, {useState, useEffect, useLayoutEffect, useRef} from 'react';
 import {createRoot} from 'react-dom/client';
 import {ArrowUpRight, ArrowRight, BookOpen, ChartNoAxesCombined, Check, ChevronLeft, ChevronRight, CircleHelp, Flame, Headphones, Home, Leaf, Lightbulb, Mic, Play, Plus, Settings, Sparkles, Sprout, Target, Volume2, X, RotateCcw, CheckCircle2, Clock3} from 'lucide-react';
 import './style.css';
@@ -99,15 +99,56 @@ const dialogues={wife:[cafeDialogues.wife,[
 ]]};
 cafeDialogues.husband.forEach((t,i)=>{t.answerParts=[japaneseGroups[0][0].sentence,japaneseGroups[0][1].sentence,[['大丈夫','だいじょうぶ'],'です。ありがとうございます。']][i]});
 
+// Keep a single focus session across lesson → completion, but focus each new dialog.
+function useModalFocus(modal,appRef,dialogRef,onClose){
+ const closeRef=useRef(onClose);closeRef.current=onClose;
+ const visible=Boolean(modal);
+ useLayoutEffect(()=>{
+  if(!visible)return;
+  const opener=document.activeElement;
+  const dialog=dialogRef.current;
+  const backgrounds=[...appRef.current.children].filter(element=>!element.contains(dialog));
+  const previousInert=backgrounds.map(element=>element.inert);
+  backgrounds.forEach(element=>{element.inert=true});
+  const focusable=()=>[...dialog.querySelectorAll('button,a[href],input,select,textarea,[tabindex]')]
+   .filter(element=>!element.disabled&&element.tabIndex>=0&&!element.closest('[inert]')&&element.getClientRects().length);
+  const focusFirst=()=>{(focusable()[0]||dialog).focus({preventScroll:true})};
+  const keydown=event=>{
+   if(event.key==='Escape'){event.preventDefault();event.stopPropagation();closeRef.current();return}
+   if(event.key!=='Tab')return;
+   const targets=focusable(),first=targets[0],last=targets[targets.length-1];
+   if(!first){event.preventDefault();dialog.focus();return}
+   if(!dialog.contains(document.activeElement)||event.shiftKey&&document.activeElement===first||!event.shiftKey&&document.activeElement===last){
+    event.preventDefault();(event.shiftKey?last:first).focus();
+   }
+  };
+  const containFocus=event=>{if(!dialog.contains(event.target))focusFirst()};
+  document.addEventListener('keydown',keydown,true);
+  document.addEventListener('focusin',containFocus,true);
+  return()=>{
+   document.removeEventListener('keydown',keydown,true);
+   document.removeEventListener('focusin',containFocus,true);
+   backgrounds.forEach((element,index)=>{element.inert=previousInert[index]});
+   const canRestore=opener instanceof HTMLElement&&opener.isConnected&&!opener.closest('[inert]')&&!opener.disabled&&opener.getClientRects().length;
+   const target=canRestore?opener:appRef.current?.querySelector('.nav-item.active');
+   target?.focus({preventScroll:true});
+  };
+ },[visible]);
+ useLayoutEffect(()=>{
+  if(modal)dialogRef.current?.querySelector('.close-modal')?.focus({preventScroll:true});
+ },[modal]);
+}
+
 function App(){
  const [store,setStore]=useState(readStore),[page,setPage]=useState('홈'),[modal,setModal]=useState(null),[lesson,setLesson]=useState(null),[index,setIndex]=useState(0),[revealed,setRevealed]=useState(false),[answer,setAnswer]=useState(''),[feedback,setFeedback]=useState(null),[speech,setSpeech]=useState(''),[listening,setListening]=useState(false),[query,setQuery]=useState(''),[filter,setFilter]=useState('전체'),[scenario,setScenario]=useState(0),[now,setNow]=useState(Date.now()),[toast,setToast]=useState(''),[saveFailed,setSaveFailed]=useState(false);
+ const appRef=useRef(null),dialogRef=useRef(null);
+ useModalFocus(modal,appRef,dialogRef,close);
  const started=useRef(0),recognition=useRef(null),generation=useRef(0),storeRef=useRef(store),committed=useRef(store),pending=useRef([]);storeRef.current=store;
  const active=store.active,profile=profiles[active],data=store.learners[active],allWords=profile.groups.flat(),todayMinutes=data.dailyMinutes?.[dateKey()]||0;
  const due=allWords.filter(w=>Number(data.reviews[w.key])>0&&Number(data.reviews[w.key])<=now);
  const item=lesson?.items[index];const conversation=dialogues[active][lesson?.group||0];const turn=conversation[index];
  useEffect(()=>{const t=setInterval(()=>setNow(Date.now()),15000);return()=>clearInterval(t)},[]);
  useEffect(()=>()=>{generation.current++;recognition.current?.abort();window.speechSynthesis?.cancel()},[]);
- useEffect(()=>{const handler=e=>{if(e.key==='Escape')close()};window.addEventListener('keydown',handler);return()=>window.removeEventListener('keydown',handler)},[]);
  useEffect(()=>{const sync=e=>{if(e.key!==STORAGE)return;const latest=readSavedStore();if(!latest)return;if(pending.current.length){persist();return}const next={...latest,active:storeRef.current.active};committed.current=next;storeRef.current=next;setStore(next);setNow(Date.now())};window.addEventListener('storage',sync);return()=>window.removeEventListener('storage',sync)},[]);
  // Retry operations, never optimistic learner snapshots: rebase onto the latest saved data.
  // Each queued update captures its learner and immutable input before it can be replayed.
@@ -146,7 +187,7 @@ function App(){
   if(completed){setModal('완료');setLesson(null)}else{setIndex(i=>i+1);reset()}
  }
  const nav=[{label:'홈',icon:Home},{label:'나의 학습',icon:BookOpen},{label:'복습 노트',icon:RotateCcw},{label:'학습 리포트',icon:ChartNoAxesCombined}];
- return <div className="app"><aside className="sidebar"><a href="#" className="brand" onClick={e=>{e.preventDefault();setPage('홈')}}><span className="brand-icon"><Sprout/></span>bloom<span className="brand-dot">.</span></a><div className="brand-caption">함께 자라는 언어 습관</div><div className="workspace-label">OUR LEARNING SPACE</div><nav>{nav.map(({label,icon:Icon})=><button aria-label={label} className={'nav-item '+(page===label?'active':'')} key={label} onClick={()=>setPage(label)}><Icon size={19}/>{label}{label==='복습 노트'&&due.length>0&&<span className="count">{due.length}</span>}</button>)}</nav><div className="sidebar-note"><Sprout/><p>서로 다른 언어,<br/><strong>함께 자라는 매일.</strong></p><span>작은 걸음도 소중한 배움이에요.</span></div><div className="sidebar-bottom"><button aria-label="도움말" onClick={()=>setModal('도움말')}><CircleHelp size={18}/>도움말</button><button aria-label="설정" onClick={()=>setModal('설정')}><Settings size={18}/>설정</button><button className="profile" aria-label="학습 설정 열기" onClick={()=>setModal('설정')}><span className="avatar">{data.name.slice(0,1)||'🌱'}</span><span><strong>{data.name||profile.label}님</strong><small>{profile.label}</small></span></button></div></aside>
+ return <div className="app" ref={appRef}><aside className="sidebar"><a href="#" className="brand" onClick={e=>{e.preventDefault();setPage('홈')}}><span className="brand-icon"><Sprout/></span>bloom<span className="brand-dot">.</span></a><div className="brand-caption">함께 자라는 언어 습관</div><div className="workspace-label">OUR LEARNING SPACE</div><nav>{nav.map(({label,icon:Icon})=><button aria-label={label} className={'nav-item '+(page===label?'active':'')} key={label} onClick={()=>setPage(label)}><Icon size={19}/>{label}{label==='복습 노트'&&due.length>0&&<span className="count">{due.length}</span>}</button>)}</nav><div className="sidebar-note"><Sprout/><p>서로 다른 언어,<br/><strong>함께 자라는 매일.</strong></p><span>작은 걸음도 소중한 배움이에요.</span></div><div className="sidebar-bottom"><button aria-label="도움말" onClick={()=>setModal('도움말')}><CircleHelp size={18}/>도움말</button><button aria-label="설정" onClick={()=>setModal('설정')}><Settings size={18}/>설정</button><button className="profile" aria-label="학습 설정 열기" onClick={()=>setModal('설정')}><span className="avatar">{data.name.slice(0,1)||'🌱'}</span><span><strong>{data.name||profile.label}님</strong><small>{profile.label}</small></span></button></div></aside>
  <div className="main-shell"><header><span className="header-title">나의 학습 공간</span><div className="header-right"><label className="learner-select">학습자 선택<select aria-label="학습자 선택" value={active} onChange={e=>switchLearner(e.target.value)}><option value="wife">아내 · 영어</option><option value="husband">남편 · 일본어</option></select></label><span className="streak"><Flame size={16}/>{streak(data.dates)}일 연속 학습</span></div></header><main>
  <div className="greeting"><div><div className="eyebrow">{profile.label} · A LITTLE EVERY DAY</div><h1>{page==='홈'?`안녕하세요, ${data.name||profile.label}님 ☀`:page==='나의 학습'?`오늘은 어떤 ${profile.language}를 만나볼까요?`:page==='복습 노트'?'기억을 더 단단하게.':'차곡차곡 쌓이는 나의 성장.'}</h1><p>{profile.language}를 보고, 듣고, 말하며 나의 속도로 배워요.</p></div><span className="date-pill">{profile.label}의 성장 일기</span></div>
  {page==='홈'&&<><section className="hero"><div className="hero-content"><div className="hero-badge"><Sparkles size={13}/>오늘의 맞춤 학습</div><h2>{profile.language}와 조금 더<br/>가까워지는 <em>{data.goal}분.</em></h2><p>장면으로 익히고, 내 목소리로 기억해요.<br/>오늘도 한 문장, 자신감을 키워 볼까요?</p><button className="primary" onClick={()=>open()}><Play size={16}/>오늘의 학습 시작하기<ArrowRight size={17}/></button><div className="hero-meta"><span><BookOpen size={13}/>{profile.language} · 기초</span><span><Clock3 size={13}/>나의 속도로</span></div></div><div className="hero-art"><div className="circle circle-one"/><div className="circle circle-two"/><img className="hero-photo" src={photo('photo-1442512595331-e89e73853f31')} alt="커피와 함께하는 학습"/><div className="photo-note"><Leaf size={20}/><div><small>오늘의 한마디</small><strong>{active==='wife'?'Small steps, big changes.':<Ruby parts={['ゆっくり、',['一歩','いっぽ'],'ずつ。']}/>}</strong><span>천천히, 한 걸음씩 자라나요.</span></div></div></div></section><section className="stats"><Stat icon={Target} color="green" label="오늘의 학습" value={todayMinutes} unit={`/ ${data.goal}분`} bottom="나의 하루 학습 목표" progress={Math.min(todayMinutes/data.goal*100,100)}/><Stat icon={BookOpen} color="orange" label="기억한 단어" value={data.learned.length} unit="개" bottom="하나씩 쌓이는 나의 단어들"/><Stat icon={RotateCcw} color="purple" label="복습할 단어" value={due.length} unit="개" bottom="잊기 전에 다시 만나요"/><Stat icon={Sprout} color="sage" label="완료한 학습" value={data.sessions} unit="회" bottom="한 뼘 더 자라는 매일"/></section></>}
@@ -154,7 +195,7 @@ function App(){
  {page==='복습 노트'&&<><div className="review-banner"><div><h2>{profile.language} 기억을 오래 간직해요.</h2><p>기억한 단어는 1 · 3 · 7 · 14 · 30일 간격, 어려운 단어는 10분 뒤에 복습해요.</p></div><button className="primary" onClick={()=>due.length?open('복습'):open()}>{due.length?'복습 시작하기':'새 단어 배우기'}<ArrowRight size={16}/></button></div><div className="search-row"><h2>나의 단어장 <span>{data.learned.length}</span></h2><input aria-label="단어 검색" placeholder="단어 또는 뜻으로 검색" value={query} onChange={e=>setQuery(e.target.value)}/></div><div className="vocabulary">{allWords.filter(w=>(data.learned.includes(w.key)||data.reviews[w.key])&&`${w.word}${w.meaning}${w.reading||''}`.toLowerCase().includes(query.toLowerCase())).map(w=><div className="vocab-row" key={w.id}><span><strong lang={profile.locale}><Ruby parts={w.parts} fallback={w.word}/></strong><small>{w.meaning}</small></span><span className="vocab-due">{data.reviews[w.key]<=now?'복습할 시간':data.reviews[w.key]?'다음 복습 '+new Date(data.reviews[w.key]).toLocaleString('ko-KR'):'학습한 단어'}</span><button aria-label={w.word+' 듣기'} onClick={()=>speak(w.word)}><Volume2 size={19}/></button></div>)}</div>{!allWords.some(w=>data.learned.includes(w.key)||data.reviews[w.key])&&<div className="empty"><Sprout size={40}/><h3>첫 번째 단어를 심어볼까요?</h3><p>학습하면 이곳에 나만의 단어장이 생겨요.</p><button className="primary" onClick={()=>open()}>첫 학습 시작하기</button></div>}</>}
  {page==='학습 리포트'&&<><section className="report-summary"><Stat icon={Clock3} color="green" label="누적 학습 시간" value={data.minutes} unit="분" bottom={profile.label+'의 기록'}/><Stat icon={BookOpen} color="orange" label="기억한 단어" value={data.learned.length} unit="개" bottom="매일 쌓이는 자신감"/><Stat icon={CheckCircle2} color="purple" label="완료한 학습" value={data.sessions} unit="회" bottom="작은 시작을 응원해요"/></section><div className="growth-card"><Sprout size={48}/><h2>나의 {profile.language}가 자라고 있어요.</h2><p>하루 {data.goal}분, 나의 속도로 꾸준히.<br/>완료한 학습의 실제 경과 시간을 기록해요.</p><div className="growth-progress"><span style={{width:Math.min(data.sessions/7*100,100)+'%'}}/></div><small>첫 성장 목표 · {Math.min(data.sessions,7)} / 7회</small><button className="primary" onClick={()=>open()}>오늘도 한 뼘 자라기</button></div></>}
  <footer><span><Sprout size={15}/>Bloom a little, every day.</span><span>두 사람의 배움은 각각 이 브라우저에 저장돼요.</span></footer></main></div>
- {modal&&<div className="modal-backdrop" onClick={close}><section className={'modal '+(modal==='lesson'?'lesson-modal':'')} role="dialog" aria-modal="true" aria-label={modal==='lesson'?lesson.mode:modal} onClick={e=>e.stopPropagation()}><button className="close-modal" aria-label="닫기" onClick={close}><X size={21}/></button>
+ {modal&&<div className="modal-backdrop" onClick={close}><section ref={dialogRef} tabIndex={-1} className={'modal '+(modal==='lesson'?'lesson-modal':'')} role="dialog" aria-modal="true" aria-label={modal==='lesson'?lesson.mode:modal} onClick={e=>e.stopPropagation()}><button className="close-modal" aria-label="닫기" onClick={close}><X size={21}/></button>
  {modal==='lesson'&&lesson&&<><div className="lesson-top"><span>{profile.label} · {lesson.mode}</span><strong>{index+1} / {lesson.mode==='짧은 대화'?conversation.length:lesson.items.length}</strong></div><div className="lesson-progress"><span style={{width:(index+1)/(lesson.mode==='짧은 대화'?conversation.length:lesson.items.length)*100+'%'}}/></div><img className="lesson-image" src={photo(item?.image)} alt="카페와 여행의 학습 장면"/><div className="lesson-body">
  {lesson.mode==='짧은 대화'?<><p className="eyebrow">{profile.titles[lesson.group]} · 대화 {index+1}</p><div className="dialogue-prompt" lang={profile.locale}><Ruby parts={turn.parts} fallback={turn.prompt}/><button aria-label="상대방 말 듣기" onClick={()=>speak(turn.prompt)}><Volume2 size={20}/></button></div><p className="translation">{turn.ko}</p><div className="hint">내가 말할 뜻: {turn.meaning}</div></>:lesson.mode==='문장 떠올리기'?<><h2>이 문장을 {profile.language}로 말해 볼까요?</h2><p className="recall-prompt">{item.ko}</p><p className="translation">먼저 답을 입력해 보세요. 시도 후 예문을 확인할 수 있어요.</p></>:<><div className="lesson-word"><h2 lang={profile.locale}><Ruby parts={item.parts} fallback={item.word}/></h2><button aria-label="발음 듣기" onClick={()=>speak(item.word)}><Volume2 size={24}/></button></div><span className="pron">{item.pron}</span>{revealed||lesson.mode==='듣고 따라 말하기'?<><h3>{item.meaning}</h3><p className="hint"><Lightbulb size={17}/>{item.hint}</p><button className="example" lang={profile.locale} aria-label="예문 듣기" onClick={()=>speak(item.example)}><span><Ruby parts={item.sentence} fallback={item.example}/></span><Volume2 size={16}/></button>{item.kana&&<p className="kana">가나 읽기: {item.kana}</p>}<p className="translation">{item.ko}</p></>:<button className="reveal" onClick={()=>setRevealed(true)}>장면을 보고 뜻을 떠올려 보세요.<span>뜻 확인하기<ArrowRight size={15}/></span></button>}</>}
  {['듣고 따라 말하기','문장 떠올리기','짧은 대화'].includes(lesson.mode)&&<form className="speaking" onSubmit={e=>{e.preventDefault();attempt()}}><button type="button" className="primary" onClick={record} disabled={listening}><Mic size={17}/>{listening?'듣고 있어요…':'마이크로 말하기'}</button><p role="status">{speech||'음성인식 또는 직접 입력으로 연습해요. 인식된 문장의 비교이며 발음 평가는 제공하지 않아요.'}</p><label className="answer-label">{lesson.mode==='짧은 대화'?'나의 대답':'문장 입력 연습'}<input lang={profile.locale} aria-label={lesson.mode==='짧은 대화'?'나의 대답':'문장 입력 연습'} placeholder={active==='husband'?'일본어 또는 가나로 입력하세요':'영어 문장을 입력하세요'} value={answer} onChange={e=>{setAnswer(e.target.value);setFeedback(null)}}/></label><button className="check-answer" disabled={!answer.trim()||listening} type="submit">문장 확인</button>{feedback&&<div className={'answer-feedback '+(feedback.ok?'correct':'retry')} role="status"><strong>{feedback.ok?'예문과 일치해요!':'예문과 비교해 보세요.'}</strong><p>{lesson.mode==='짧은 대화'?'다른 자연스러운 표현도 가능해요. 아래는 한 가지 답변 예시예요.':'띄어쓰기와 문장부호를 제외한 문장을 비교했어요.'}</p>{lesson.mode!=='듣고 따라 말하기'&&<><p className="example" lang={profile.locale}>{lesson.mode==='짧은 대화'?<Ruby parts={turn.answerParts} fallback={turn.answer}/>:<Ruby parts={item.sentence} fallback={item.example}/>}</p>{(turn?.kana&&lesson.mode==='짧은 대화'||item.kana&&lesson.mode==='문장 떠올리기')&&<p className="kana">{lesson.mode==='짧은 대화'?turn.kana:item.kana}</p>}<button type="button" className="text-button" onClick={()=>speak(lesson.mode==='짧은 대화'?turn.answer:item.example)}><Volume2 size={17}/>예시 듣기</button></>}</div>}</form>}
