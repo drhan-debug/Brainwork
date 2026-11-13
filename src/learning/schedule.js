@@ -13,7 +13,8 @@ function asDate(at = Date.now()) {
  * Return a new sentence-progress map after one completed session outcome.
  * The caller must combine all attempts first: any failure makes passed false.
  * Failed sentences are due at the start of the next local calendar day.
- * Successful sentences advance through 3, 7, 14, 30, and 60 local days.
+ * Successful due sentences advance through 3, 7, 14, 30, and 60 local days.
+ * Successful early practice records the outcome without changing the schedule.
  */
 export function recordSentenceOutcome(progress = {}, id, { passed, at = Date.now() } = {}) {
   if (typeof id !== 'string' || !id) {
@@ -25,6 +26,16 @@ export function recordSentenceOutcome(progress = {}, id, { passed, at = Date.now
 
   const reviewedAt = asDate(at);
   const previous = Object.hasOwn(progress, id) ? progress[id] : undefined;
+  if (passed && Number.isFinite(previous?.dueAt) && previous.dueAt > reviewedAt.getTime()) {
+    return {
+      ...progress,
+      [id]: {
+        ...previous,
+        lastOutcome: 'passed',
+        lastReviewedAt: reviewedAt.getTime(),
+      },
+    };
+  }
   const previousStage = Number.isInteger(previous?.stage)
     ? Math.max(0, Math.min(previous.stage, SENTENCE_REVIEW_INTERVAL_DAYS.length))
     : 0;
