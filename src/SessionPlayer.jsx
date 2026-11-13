@@ -86,7 +86,20 @@ export default function SentenceSession({ scenario, lang = 'en', sentences: subs
       previous.forEach(([node, inert]) => { node.inert = inert; });
       document.body.style.overflow = previousOverflow;
       document.removeEventListener('keydown', trap);
-      if (previousFocus?.isConnected) previousFocus.focus();
+      requestAnimationFrame(() => {
+        // A route may remove the opener while the session is open. Wait for
+        // that render before choosing a visible control in the current page.
+        if (dialog.current?.isConnected) return;
+        const available = (node) => node?.isConnected && !node.closest('[inert]') && !node.disabled && node.getClientRects().length > 0;
+        const controls = [
+          ...document.querySelectorAll('.nav-item.active, nav [aria-current]'),
+          ...document.querySelectorAll('button:not(:disabled), a[href]'),
+        ];
+        const destination = available(previousFocus) && previousFocus !== document.body
+          ? previousFocus
+          : controls.find(available);
+        destination?.focus();
+      });
     };
   }, []);
 
@@ -170,7 +183,7 @@ export default function SentenceSession({ scenario, lang = 'en', sentences: subs
   });
 
   return createPortal(<div className="session-overlay"><section ref={dialog} className="sentence-session" role="dialog" aria-modal="true" aria-labelledby="session-title">
-    <header className="session-header"><a className="session-wordmark" href="#" onClick={(event) => event.preventDefault()}>bloom<span>practice</span></a><button className="session-close" onClick={close} aria-label={phase === 'summary' ? '세션 닫기' : '세션 취소하고 닫기'}>닫기 <span aria-hidden="true">×</span></button></header>
+    <header className="session-header"><div className="session-wordmark">bloom<span>practice</span></div><button className="session-close" onClick={close} aria-label={phase === 'summary' ? '세션 닫기' : '세션 취소하고 닫기'}>닫기 <span aria-hidden="true">×</span></button></header>
     <main className="session-main">
       <div className="session-eyebrow">{lang === 'ja' ? 'JAPANESE' : 'ENGLISH'} · {scenario.titleKo}</div>
       <h1 id="session-title" tabIndex={-1} ref={heading}>{labels[phase]}</h1>
@@ -179,7 +192,7 @@ export default function SentenceSession({ scenario, lang = 'en', sentences: subs
         <p className="session-intro">장면과 뜻을 먼저 살펴보세요. 다음 단계부터는 짧은 힌트만 보여 드려요.</p>
         <div className="session-context"><img src={scenario.image} alt={scenario.titleKo} /><ol>{sentences.map((item) => <li key={item.id}><div className="session-target"><SentenceTarget sentence={item} lang={lang} /></div><p>{item.meaningKo}</p></li>)}</ol></div>
         <button className="session-primary" onClick={advance}>뜻을 확인했어요 · 듣기 시작</button>
-      </> : phase === 'summary' ? <div className="session-card session-summary"><div className="session-done" aria-hidden="true">✓</div><h2>오늘의 문장을 끝까지 연습했어요</h2><p>{sentences.length}문장 · 퀴즈 3개 · {Math.max(1, Math.round(elapsed / 60000))}분</p><p>한 번이라도 다른 답을 입력한 문장은 복습 대상으로 기록해요.</p><ul>{sentences.map((item) => <li key={item.id}><SentenceTarget sentence={item} lang={lang} /><span>{results.find((result) => result.sentenceId === item.id)?.failed ? '다시 연습' : '연습 완료'}</span></li>)}</ul><p className="session-note">답안의 글자와 단어만 비교했어요.</p><button className="session-primary" onClick={close}>세션 닫기</button></div> : <>
+      </> : phase === 'summary' ? <div className="session-card session-summary"><div className="session-done" aria-hidden="true">✓</div><h2>오늘의 문장을 끝까지 연습했어요</h2><p>{sentences.length}문장 · 퀴즈 3개 · {elapsed < 60000 ? '1분 미만' : `약 ${Math.floor(elapsed / 60000)}분`}</p><p>한 번이라도 다른 답을 입력한 문장은 복습 대상으로 기록해요.</p><ul>{sentences.map((item) => <li key={item.id}><SentenceTarget sentence={item} lang={lang} /><span>{results.find((result) => result.sentenceId === item.id)?.failed ? '다시 연습' : '연습 완료'}</span></li>)}</ul><p className="session-note">답안의 글자와 단어만 비교했어요.</p><button className="session-primary" onClick={close}>세션 닫기</button></div> : <>
         <p className="session-counter">{phase === 'quiz' ? `퀴즈 ${index + 1} / 3` : `문장 ${index + 1} / ${sentences.length}`}</p>
         {phase === 'quiz' && <p className="session-note">오늘 연습한 문장만 출제돼요.{sentences.length < 3 && ' 문장이 3개보다 적으면 같은 문장을 다시 물어봐요.'}</p>}
         <div className="session-practice"><img src={scenario.image} alt={scenario.titleKo} /><div className="session-card">
