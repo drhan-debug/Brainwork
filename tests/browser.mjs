@@ -14,20 +14,21 @@ const browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||'
 const errors=[];
 let failures=0;
 const legacy={learned:['Bloom','Reservation'],reviews:{Bloom:Date.now()-60000,Reservation:Date.now()+86400000},sessions:7,minutes:42.5,name:'기존 학습자',goal:20,dates:['2026-11-12'],dailyMinutes:{'2026-11-12':5.5}};
-async function fixture(saved=legacy,viewport={width:1440,height:1000}) {
+async function fixture(saved=legacy,viewport={width:1440,height:1000},profiles=null) {
   const context=await browser.newContext({viewport});
   context.setDefaultTimeout(10000);
-  await context.addInitScript(({saved})=>{
+  await context.addInitScript(({saved,profiles})=>{
     if(!localStorage.getItem('test-seeded')){
       localStorage.clear();
       if(saved!==null)localStorage.setItem('bloom-state',JSON.stringify(saved));
+      if(profiles!==null)localStorage.setItem('bloom-profiles-v2',JSON.stringify(profiles));
       localStorage.setItem('test-seeded','true');
     }
     window.__utterances=[];window.__recognitionLanguages=[];
     window.SpeechSynthesisUtterance=class {constructor(text){this.text=text;}};
     Object.defineProperty(window,'speechSynthesis',{configurable:true,value:{cancel(){},speak(utterance){window.__utterances.push({text:utterance.text,lang:utterance.lang});},getVoices(){return[];}}});
     window.SpeechRecognition=class {start(){window.__recognitionLanguages.push(this.lang);this.onstart?.();this.onresult?.({results:[[{transcript:'テストです'}]]});this.onend?.();}stop(){this.onend?.();}abort(){this.onend?.();}};
-  },{saved});
+  },{saved,profiles});
   const page=await context.newPage();
   page.on('pageerror',error=>errors.push(error.message));
   await page.goto(base);
@@ -67,6 +68,64 @@ try{
     await page.reload();
     await page.getByLabel('학습자 선택').waitFor();
     assert.deepEqual((await state(page)).learners.wife.learned,[]);
+    await context.close();
+  });
+  await test('malformed v2 learner fields are repaired without losing a healthy sibling or valid entries',async()=>{
+    const healthy={...legacy,reviewStages:{Bloom:2},custom:{note:'keep sibling'}};
+    const validDue=Date.now()+86400000;
+    const cases=[
+      {learned:{bad:true},dates:null,reviews:[],reviewStages:'bad',dailyMinutes:false,name:42,goal:0,sessions:'7',minutes:-2},
+      {learned:['Serendipity',null,7,{}],dates:['2026-11-12',false,{}],reviews:{Serendipity:validDue,bad:'tomorrow',negative:-1},reviewStages:{Serendipity:2,bad:'2',fraction:1.5,negative:-1,tooHigh:6},dailyMinutes:{'2026-11-12':2.5,bad:'3',negative:-1},name:null,goal:'20',sessions:-1,minutes:{bad:true}},
+      {learned:null,dates:{bad:true},reviews:null,reviewStages:[],dailyMinutes:[],name:[],goal:null,sessions:null,minutes:'5'}
+    ];
+    for(const [index,malformed] of cases.entries()){
+      const {page,context}=await fixture(null,undefined,{version:2,active:'wife',learners:{wife:{...malformed,custom:{note:'keep repaired learner'}},husband:healthy}});
+      await page.getByRole('button',{name:'복습 노트',exact:true}).click();
+      await page.getByRole('button',{name:'학습 리포트',exact:true}).click();
+      await page.getByRole('button',{name:'설정',exact:true}).click();
+      assert.equal(await page.getByLabel('이름',{exact:true}).inputValue(),'지은');
+      assert.equal(await page.getByLabel('하루 학습 목표').inputValue(),'10');
+      await page.getByLabel('이름',{exact:true}).fill('Repaired');
+      await page.getByRole('button',{name:'설정 완료'}).click();
+      const repaired=(await state(page)).learners;
+      assert.deepEqual(repaired.husband,healthy,`case ${index}: healthy sibling`);
+      assert.deepEqual(repaired.wife.custom,{note:'keep repaired learner'});
+      assert.equal(repaired.wife.sessions,0);
+      assert.equal(repaired.wife.minutes,0);
+      assert.equal(repaired.wife.goal,10);
+      assert.deepEqual(repaired.wife.learned,index===1?['Serendipity']:[]);
+      assert.deepEqual(repaired.wife.dates,index===1?['2026-11-12']:[]);
+      assert.deepEqual(repaired.wife.reviews,index===1?{Serendipity:validDue}:{});
+      assert.deepEqual(repaired.wife.reviewStages,index===1?{Serendipity:2}:{});
+      assert.deepEqual(repaired.wife.dailyMinutes,index===1?{'2026-11-12':2.5}:{});
+      await page.getByRole('button',{name:'오늘도 한 뼘 자라기'}).click();
+      await page.getByRole('button',{name:/뜻 확인하기/}).click();
+      await page.getByRole('button',{name:'기억했어요'}).click();
+      assert.ok((await state(page)).learners.wife.learned.includes('Serendipity'));
+      assert.deepEqual((await state(page)).learners.husband,healthy);
+      await context.close();
+    }
+  });
+  await test('legacy field repair preserves valid progress independently of a malformed learned field',async()=>{
+    const saved={...legacy,learned:'bad',reviews:{Bloom:legacy.reviews.Bloom,bad:'soon',negative:-3},reviewStages:{Bloom:2,bad:7},dates:['2026-11-12',null,3],dailyMinutes:{'2026-11-12':5.5,bad:false},name:{bad:true},goal:-10,custom:{note:'keep legacy extension'}};
+    const {page,context}=await fixture(saved);
+    const migrated=(await state(page)).learners.wife;
+    assert.deepEqual(migrated.learned,[]);
+    assert.equal(migrated.sessions,legacy.sessions);
+    assert.equal(migrated.minutes,legacy.minutes);
+    assert.deepEqual(migrated.reviews,{Bloom:legacy.reviews.Bloom});
+    assert.deepEqual(migrated.reviewStages,{Bloom:2});
+    assert.deepEqual(migrated.dates,['2026-11-12']);
+    assert.deepEqual(migrated.dailyMinutes,{'2026-11-12':5.5});
+    assert.equal(migrated.name,'지은');
+    assert.equal(migrated.goal,10);
+    assert.deepEqual(migrated.custom,saved.custom);
+    assert.deepEqual(await page.evaluate(()=>JSON.parse(localStorage.getItem('bloom-state'))),saved,'original legacy record remains intact');
+    await page.getByRole('button',{name:'복습 노트',exact:true}).click();
+    await page.getByRole('button',{name:'복습 시작하기',exact:true}).click();
+    await page.getByRole('button',{name:/뜻 확인하기/}).click();
+    await page.getByRole('button',{name:'기억했어요'}).click();
+    assert.ok((await state(page)).learners.wife.learned.includes('Bloom'));
     await context.close();
   });
   await test('Japanese lessons render furigana, use ja-JP audio, and isolate settings and learning',async()=>{
@@ -333,6 +392,75 @@ try{
       await page.getByLabel('학습자 선택').waitFor();
       assert.deepEqual((await state(page)).learners,saved.learners,'both records survive reload');
     }
+    await context.close();
+  });
+  await test('failed writes survive further progress and another tab update, then persist exactly once on retry',async()=>{
+    const {page:english,context}=await fixture(null);
+    const japanese=await context.newPage();
+    japanese.on('pageerror',error=>errors.push(error.message));
+    await japanese.goto(base);
+    await choose(japanese,'husband');
+    const startedAt=Date.now();
+    await english.clock.setFixedTime(startedAt);
+    await english.evaluate(()=>{
+      const original=Storage.prototype.setItem;
+      window.__failedWrites=0;
+      window.__storageEvents=0;
+      window.addEventListener('storage',event=>{if(event.key==='bloom-profiles-v2')window.__storageEvents++;});
+      Storage.prototype.setItem=function(key,value){
+        if(key==='bloom-profiles-v2'){window.__failedWrites++;throw new DOMException('Temporarily unavailable','QuotaExceededError');}
+        return original.call(this,key,value);
+      };
+      window.__restoreWrites=()=>{Storage.prototype.setItem=original;};
+    });
+    await english.getByRole('button',{name:'오늘의 학습 시작하기'}).click();
+    await english.getByRole('button',{name:/뜻 확인하기/}).click();
+    await english.getByRole('button',{name:'기억했어요'}).click();
+    await english.getByRole('button',{name:'닫기',exact:true}).click();
+    await english.getByRole('button',{name:/짧은 대화/}).click();
+    for(const [i,answer] of ['A coffee, please.','To go, please.','That is all, thank you.'].entries()){
+      await english.getByLabel('나의 대답').fill(answer);
+      await english.getByRole('button',{name:'문장 확인',exact:true}).click();
+      if(i===2)await english.clock.setFixedTime(startedAt+90000);
+      await english.getByRole('button',{name:i===2?'대화 마치기':'다음 대화',exact:true}).click();
+    }
+    await english.getByRole('button',{name:'닫기',exact:true}).click();
+    assert.ok(await english.evaluate(()=>window.__failedWrites)>=2);
+    assert.equal((await state(english)).learners.wife.sessions,0,'failed writes did not reach disk');
+    const learned=english.locator('.stat').filter({hasText:'기억한 단어'}).locator('.stat-value');
+    const sessions=english.locator('.stat').filter({hasText:'완료한 학습'}).locator('.stat-value');
+    assert.equal(await learned.innerText(),'1개','later failed mutation retains earlier unsaved word');
+    assert.equal(await sessions.innerText(),'1회');
+    await japanese.getByRole('button',{name:'설정',exact:true}).click();
+    await japanese.getByLabel('이름',{exact:true}).fill('Other tab');
+    await japanese.getByLabel('하루 학습 목표').selectOption('5');
+    await japanese.getByRole('button',{name:'설정 완료'}).click();
+    // A synthetic event is unnecessary: both pages share real browser storage.
+    await english.waitForFunction(()=>window.__storageEvents>0);
+    assert.equal(await learned.innerText(),'1개','storage synchronization retains unsaved word');
+    assert.equal(await sessions.innerText(),'1회','storage synchronization retains unsaved session');
+    await english.getByRole('button',{name:'설정',exact:true}).click();
+    await english.evaluate(()=>window.__restoreWrites());
+    await english.getByLabel('이름',{exact:true}).fill('Retried');
+    await english.getByLabel('하루 학습 목표').selectOption('20');
+    await english.getByRole('button',{name:'설정 완료'}).click();
+    const saved=(await state(english)).learners;
+    assert.deepEqual(saved.wife.learned,['Serendipity']);
+    assert.equal(saved.wife.reviewStages.Serendipity,1,'replaying cannot advance a newly created schedule twice');
+    assert.equal(saved.wife.sessions,1,'completed session is applied once');
+    assert.equal(saved.wife.minutes,1.5,'elapsed time is captured before later retry');
+    assert.equal(saved.wife.dates.length,1);
+    assert.deepEqual(Object.values(saved.wife.dailyMinutes),[1.5]);
+    assert.equal(saved.wife.name,'Retried');
+    assert.equal(saved.wife.goal,20);
+    assert.equal(saved.husband.name,'Other tab');
+    assert.equal(saved.husband.goal,5);
+    assert.deepEqual(saved.husband.learned,[]);
+    assert.equal(await english.getByLabel('학습자 선택').inputValue(),'wife');
+    assert.equal(await japanese.getByLabel('학습자 선택').inputValue(),'husband');
+    await english.reload();
+    await english.getByLabel('학습자 선택').waitFor();
+    assert.deepEqual((await state(english)).learners,saved);
     await context.close();
   });
   await test('English course continuity, en-US speech, and Japanese course switching',async()=>{
