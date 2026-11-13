@@ -112,7 +112,7 @@ export const englishScenarios = [
   ]),
   scene('family_plans', '가족과 계획 세우기', 'flowers', [
     ['Are you free on Sunday?', '일요일에 시간 있어요?', '가족 · 일정 확인'],
-    ['Let us visit Grandma.', '할머니를 뵈러 가요.', '가족 · 방문 제안'],
+    ["Let's visit Grandma.", '할머니를 뵈러 가요.', '가족 · 방문 제안'],
     ['Can we leave after lunch?', '점심 먹고 출발할 수 있을까요?', '가족 · 출발 조율'],
     ['I will bring some fruit.', '제가 과일을 좀 가져갈게요.', '가족 · 준비할 것'],
   ]),
@@ -124,7 +124,7 @@ export const englishScenarios = [
   ]),
   scene('weather_plans', '날씨에 맞춰 계획하기', 'forest', [
     ['Will it rain this afternoon?', '오늘 오후에 비가 올까요?', '친구 · 날씨 확인'],
-    ['Let us take an umbrella.', '우산을 가져가요.', '친구 · 준비 제안'],
+    ["Let's take an umbrella.", '우산을 가져가요.', '친구 · 준비 제안'],
     ['It is too cold for a picnic.', '소풍을 가기에는 너무 추워요.', '친구 · 날씨 판단'],
     ['How about going to a museum?', '박물관에 가는 건 어때요?', '친구 · 실내 활동 제안'],
   ]),
