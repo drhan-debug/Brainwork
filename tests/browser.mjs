@@ -1,4 +1,5 @@
 // npm ci --prefix tests && npm test --prefix tests
+// TEST_FILTER="mobile|favicon" node tests/browser.mjs runs focused regressions.
 // Speech mocks verify routing/transcription, never acoustic or phoneme quality.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -66,7 +67,7 @@ async function complete(page,sentences,{failFirst=false,checkFlow=false,micropho
  }
  await d.getByRole('heading',{name:'세션 완료',exact:true}).waitFor();
 }
-async function test(name,fn){try{await fn();passes++;console.log(`PASS ${name}`);}catch(e){failures++;console.error(`FAIL ${name}\n${e.stack}`);}}
+async function test(name,fn){if(process.env.TEST_FILTER&&!new RegExp(process.env.TEST_FILTER).test(name))return;try{await fn();passes++;console.log(`PASS ${name}`);}catch(e){failures++;console.error(`FAIL ${name}\n${e.stack}`);}}
 try{
  for(let i=0;i<100;i++){try{if((await fetch(base)).ok)break;}catch{}if(i===99)throw Error(serverLog);await new Promise(r=>setTimeout(r,100));}
  await test('both curricula contain 20 stable aligned scenarios and 80 valid sentences with exact Japanese ruby',async()=>{
@@ -99,6 +100,46 @@ try{
  });
  await test('mobile full-screen modal traps focus, restores prior page/opener and avoids horizontal overflow',async()=>{
   const{page,context}=await fixture({saved:null,mobile:true});await page.getByRole('button',{name:'나의 학습',exact:true}).click();const opener=page.getByRole('button',{name:englishScenarios[0].titleKo+' 문장 세션 시작',exact:true});await opener.click();const d=dialog(page);assert.ok(await d.getByRole('heading',{name:'장면 이해'}).evaluate(el=>el===document.activeElement));const rect=await d.boundingBox();assert.ok(rect.width<=390&&rect.height>=800);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));for(let i=0;i<12;i++){await page.keyboard.press('Tab');assert.ok(await d.evaluate(el=>el.contains(document.activeElement)));}await complete(page,englishScenarios[0].sentences);await click(page,d.getByRole('button',{name:'세션 닫기',exact:true}).last());assert.equal(await d.count(),0);assert.ok(await opener.evaluate(el=>el===document.activeElement));assert.ok(await page.getByRole('heading',{name:'생활 속 20가지 상황'}).isVisible());assert.equal(await page.evaluate(()=>document.body.style.overflow),'');await context.close();
+ });
+ await test('mobile 390x960 session resets overlay scroll on phase, item and summary transitions',async()=>{
+  const{page,context}=await fixture({saved:null,mobile:true});
+  try{
+   await page.setViewportSize({width:390,height:960});
+   await start(page);
+   const d=dialog(page),overlay=page.locator('.session-overlay'),sentences=englishScenarios[0].sentences;
+   async function topVisible(phase){
+    await d.getByRole('heading',{name:phase,exact:true}).waitFor();
+    const position=await overlay.evaluate(el=>el.scrollTop);
+    assert.ok(position<=1,`${phase}: overlay scrollTop was ${position}`);
+    for(const locator of [d.locator('.session-header'),d.locator('.session-close'),d.getByRole('heading',{name:phase,exact:true})]){
+     const rect=await locator.boundingBox();assert.ok(rect&&rect.y>=0&&rect.y+rect.height<=960,`${phase}: heading/header/close must be in viewport`);
+    }
+   }
+   async function scrollBottom(){
+    const position=await overlay.evaluate(el=>{el.scrollTop=el.scrollHeight;return el.scrollTop;});
+    assert.ok(position>50,`fixture must actually scroll before advancing; got ${position}`);
+   }
+   await click(page,d.getByRole('button',{name:'뜻을 확인했어요 · 듣기 시작'}));
+   for(let i=0;i<sentences.length;i++)await click(page,d.getByRole('button',{name:'다음으로 →',exact:true}));
+   for(const sentence of sentences){await answer(page,sentence);await scrollBottom();await click(page,d.getByRole('button',{name:'다음으로 →',exact:true}));}
+   await topVisible('기억해서 말하기');
+   for(const[phase,count]of [['기억해서 말하기',sentences.length],['오늘의 퀴즈',3]]){
+    for(let i=0;i<count;i++){
+     await answer(page,sentences[i%sentences.length]);await scrollBottom();
+     const last=phase==='오늘의 퀴즈'&&i===count-1;
+     await click(page,d.getByRole('button',{name:last?'결과 보기':'다음으로 →',exact:true}));
+     await topVisible(last?'세션 완료':i===count-1?'오늘의 퀴즈':phase);
+    }
+   }
+  }finally{await context.close();}
+ });
+ await test('linked SVG favicon is served successfully as an SVG image',async()=>{
+  const{page,context}=await fixture({saved:null});
+  try{
+   const icon=page.locator('link[rel="icon"][type="image/svg+xml"]');assert.equal(await icon.count(),1);
+   const href=await icon.evaluate(el=>el.href);assert.ok(new URL(href).pathname.endsWith('.svg'));
+   const response=await page.request.get(href);assert.equal(response.status(),200);assert.match(response.headers()['content-type'],/image\/svg\+xml/);assert.match(await response.text(),/<svg[\s>]/);
+  }finally{await context.close();}
  });
  assert.deepEqual(errors,[],'no uncaught browser errors');
 }finally{await browser.close();try{process.kill(-server.pid,'SIGTERM');}catch{}}
