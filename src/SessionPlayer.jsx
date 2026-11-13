@@ -22,6 +22,7 @@ export default function SentenceSession({ scenario, lang = 'en', sentences: subs
   const [listening, setListening] = useState(false);
   const [speechStatus, setSpeechStatus] = useState('');
   const [elapsed, setElapsed] = useState(0);
+  const opener = useRef(document.activeElement);
   const overlay = useRef(null);
   const dialog = useRef(null);
   const heading = useRef(null);
@@ -63,7 +64,7 @@ export default function SentenceSession({ scenario, lang = 'en', sentences: subs
 
   useEffect(() => {
     mounted.current = true;
-    const previousFocus = document.activeElement;
+    const previousFocus = opener.current;
     const previousOverflow = document.body.style.overflow;
     const root = dialog.current?.closest('.session-overlay');
     const siblings = [...document.body.children].filter((node) => node !== root && !node.contains(root));
