@@ -1,0 +1,8 @@
+{
+  "name": "bloom-english",
+  "main": "server/index.js",
+  "compatibility_date": "2026-11-13",
+  "limits": { "cpu_ms": 30000 },
+  "assets": { "directory": "dist", "binding": "ASSETS", "run_worker_first": ["/api/*"] },
+  "d1_databases": [{ "binding": "DB", "database_name": "bloom-accounts", "migrations_dir": "migrations" }]
+}
