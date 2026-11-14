@@ -4,6 +4,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { chromium } from 'playwright';
+import { applyProgress, blankLearner } from '../server/domain.js';
 import { englishScenarios } from '../src/content/scenarios.en.js';
 import { japaneseScenarios } from '../src/content/scenarios.ja.js';
 import { validateCurriculum, SCENARIO_IDS, EN_MATERNAL_SCENARIO_IDS, makeSentenceId, getNextSentence } from '../src/learning/schema.js';
@@ -22,7 +23,7 @@ const browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||'
 const errors=[];let failures=0;let passes=0;
 const fixed=Date.parse('2026-11-14T04:30:00Z'); // 23:30 in America/New_York: next local day != +24h.
 const legacy={learned:['Bloom','Reservation'],reviews:{Bloom:fixed-60000,Reservation:fixed+86400000},reviewStages:{Bloom:2},sessions:7,minutes:42.5,name:'기존 학습자',goal:20,dates:['2026-11-12'],dailyMinutes:{'2026-11-12':5.5},custom:{preserve:true}};
-async function fixture({saved=legacy,profiles=null,mobile=false}={}){
+async function fixture({saved=legacy,profiles=null,mobile=false,apiRoute=null}={}){
  const context=await browser.newContext({viewport:mobile?{width:390,height:844}:{width:1440,height:1000},timezoneId:'America/New_York'});context.setDefaultTimeout(7000);
  await context.addInitScript(({saved,profiles})=>{
   if(!localStorage.getItem('test-seeded')){localStorage.clear();if(saved!==null)localStorage.setItem('bloom-state',JSON.stringify(saved));if(profiles)localStorage.setItem('bloom-profiles-v2',JSON.stringify(profiles));localStorage.setItem('test-seeded','true');}
@@ -31,7 +32,8 @@ async function fixture({saved=legacy,profiles=null,mobile=false}={}){
   Object.defineProperty(window,'speechSynthesis',{configurable:true,value:{cancel(){},getVoices(){return[];},speak(u){window.__utterances.push({text:u.text,lang:u.lang});u.onend?.();}}});
   window.SpeechRecognition=class{start(){window.__recognitionLanguages.push(this.lang);this.onstart?.();setTimeout(()=>{this.onresult?.({results:[[{transcript:window.__transcript}]]});this.onend?.();},10);}stop(){this.onend?.();}abort(){this.onend?.();}};
  },{saved,profiles});
- const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));await page.clock.install({time:fixed});await page.goto(base);await enterLocalDemo(page);await page.getByLabel('학습자 선택').waitFor();return{page,context};
+ if(apiRoute)await context.route('**/api/**',apiRoute);
+ const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));await page.clock.install({time:fixed});await page.goto(base);if(apiRoute)await page.getByRole('button',{name:'문장 세션 시작하기',exact:true}).waitFor();else await enterLocalDemo(page);if(!apiRoute)await page.getByLabel('학습자 선택').waitFor();return{page,context};
 }
 const state=page=>page.evaluate(()=>JSON.parse(localStorage.getItem('bloom-profiles-v2')));
 const choose=(page,id)=>page.getByLabel('학습자 선택').selectOption(id);
@@ -169,6 +171,60 @@ try{
    await click(page,d.getByRole('button',{name:'세션 닫기',exact:true}).last());
    await page.reload();await enterLocalDemo(page);
    assert.equal((await state(page)).learners.wife.sessions,before+1,'retry survives reload without duplicate completion');
+  }finally{await context.close();}
+ });
+ await test('mobile 390px account fullscreen retries failed API save with the same operation ID',async()=>{
+  const profile={name:'계정 학습자',language:'en',goal:10,timezone:'America/New_York'};
+  let remote={authenticated:true,account:{id:'browser-test-account',email:'browser-test@example.test'},profile,learner:blankLearner(profile),revision:0,imports:[]};
+  const requests=[],applied=new Set(),unexpected=[];
+  const apiRoute=async route=>{
+   const request=route.request(),path=new URL(request.url()).pathname;
+   if(path==='/api/session'&&request.method()==='GET')return route.fulfill({json:remote});
+   if(path!=='/api/progress'||request.method()!=='POST'){unexpected.push(request.method()+' '+path);return route.fulfill({status:500,json:{code:'UNEXPECTED_TEST_REQUEST'}});}
+   const body=request.postDataJSON();requests.push(body);
+   if(requests.length===1)return route.fulfill({status:503,json:{code:'STORAGE_UNAVAILABLE'}});
+   if(!applied.has(body.operationId)){
+    remote={...remote,revision:remote.revision+1,learner:applyProgress(remote.learner,body,profile,fixed)};
+    applied.add(body.operationId);
+   }
+   return route.fulfill({json:remote});
+  };
+  const{page,context}=await fixture({saved:null,mobile:true,apiRoute});
+  try{
+   await page.getByLabel('오늘의 문장 상황').selectOption(englishScenarios[0].id);
+   await page.getByRole('button',{name:'문장 세션 시작하기',exact:true}).click();
+   await complete(page,englishScenarios[0].sentences);
+   const d=dialog(page),status=d.locator('.session-save-status');
+   await status.filter({hasText:'서버 저장 실패'}).waitFor();
+   assert.equal(await d.getAttribute('aria-modal'),'true');
+   assert.equal(remote.learner.sessions,0,'503 leaves server state unchanged');
+   assert.deepEqual(remote.learner.sentenceProgress,{});
+   assert.equal(requests.length,1,'failed save waits for an explicit retry');
+   const retry=status.getByRole('button',{name:'다시 저장',exact:true});
+   await d.locator('.session-close').focus();
+   await page.keyboard.press('Tab');
+   assert.ok(await retry.evaluate(el=>el===document.activeElement),'retry is in the fullscreen dialog keyboard tab order');
+   const rect=await retry.boundingBox();
+   assert.ok(rect&&rect.x>=0&&rect.x+rect.width<=390&&rect.y>=0&&rect.y+rect.height<=844,'focused retry is reachable within the mobile viewport');
+   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+   await page.keyboard.press('Enter');
+   await status.filter({hasText:'계정에 저장됨'}).waitFor();
+   assert.equal(await status.getByRole('button',{name:'다시 저장'}).count(),0);
+   assert.equal(await d.getByRole('heading',{name:'세션 완료',exact:true}).count(),1);
+   assert.equal(requests.length,2);
+   assert.match(requests[0].operationId,/^[A-Za-z0-9_-]{16,100}$/);
+   assert.deepEqual(requests[1],requests[0],'retry preserves operation ID and complete request payload');
+   assert.equal(requests[0].expectedAccountId,remote.account.id);
+   assert.equal(requests[0].type,'sentenceSession');
+   assert.equal(remote.learner.sessions,1);
+   assert.equal(applied.size,1);
+   assert.deepEqual(Object.keys(remote.learner.sentenceProgress).sort(),englishScenarios[0].sentences.map(s=>s.id).sort());
+   assert.deepEqual(unexpected,[]);
+   await click(page,d.getByRole('button',{name:'세션 닫기',exact:true}).last());
+   await page.reload();
+   await page.getByRole('button',{name:'문장 세션 시작하기',exact:true}).waitFor();
+   assert.equal(remote.learner.sessions,1,'reopening the mocked server account does not resubmit completion');
+   assert.equal(requests.length,2);
   }finally{await context.close();}
  });
  await test('linked SVG favicon is served successfully as an SVG image',async()=>{
