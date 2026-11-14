@@ -1,3 +1,4 @@
+import {advancedScenarios} from './advanced.js';
 // Original beginner practice: four useful learner turns in each everyday scene.
 const scene = (id, titleKo, image, rows) => ({
   id,
@@ -135,3 +136,4 @@ export const englishScenarios = [
     ['Could you write it down?', '그것을 적어 주시겠어요?', '도움 · 글로 요청'],
   ]),
 ];
+englishScenarios.push(...advancedScenarios('en'));

@@ -2,9 +2,11 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { compareSentence } from './learning/compare';
 import './session.css';
+import {LANGUAGES} from './learning/path';
 
 export function SentenceTarget({ sentence, lang }) {
-  return <span lang={lang === 'ja' ? 'ja-JP' : 'en-US'}>{sentence.ruby && lang === 'ja'
+  if(lang==='ja'&&sentence.fullReading)return <span lang="ja-JP">{sentence.text}<small className="sentence-full-reading">{sentence.kana}</small></span>;
+  return <span lang={LANGUAGES[lang].locale}>{sentence.ruby && lang === 'ja'
     ? sentence.ruby.map((part, i) => typeof part === 'string' ? <React.Fragment key={i}>{part}</React.Fragment> : <ruby key={i}>{part[0]}<rt>{part[1]}</rt></ruby>)
     : sentence.text}</span>;
 }
@@ -34,7 +36,7 @@ export default function SentenceSession({ scenario, lang = 'en', sentences: subs
   const attemptsRef = useRef([]);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
-  const locale = lang === 'ja' ? 'ja-JP' : 'en-US';
+  const locale = LANGUAGES[lang].locale;
   const { phase, index } = step;
   const sentence = sentences[index % Math.max(1, sentences.length)];
   const ready = phase === 'listen' || (!!feedback && (feedback.matched || tries >= 2));
@@ -195,7 +197,7 @@ export default function SentenceSession({ scenario, lang = 'en', sentences: subs
   return createPortal(<div ref={overlay} className="session-overlay"><section ref={dialog} className="sentence-session" role="dialog" aria-modal="true" aria-labelledby="session-title">
     <header className="session-header"><div className="session-wordmark">bloom<span>practice</span></div><button className="session-close" onClick={close} aria-label={phase === 'summary' ? '세션 닫기' : '세션 취소하고 닫기'}>닫기 <span aria-hidden="true">×</span></button></header>
     <main className="session-main">
-      <div className="session-eyebrow">{lang === 'ja' ? 'JAPANESE' : 'ENGLISH'} · {scenario.titleKo}</div>
+      <div className="session-eyebrow">{LANGUAGES[lang].name} · {scenario.titleKo}</div>
       <h1 id="session-title" tabIndex={-1} ref={heading}>{labels[phase]}</h1>
       <nav className="session-steps" aria-label="학습 단계">{Object.entries(labels).filter(([key]) => key !== 'summary').map(([key, label], number) => <span key={key} aria-current={phase === key ? 'step' : undefined} className={phase === key ? 'active' : ''}>{number + 1}. {label}</span>)}</nav>
       {!sentences.length ? <div className="session-card"><p>복습할 문장이 없어요.</p><button onClick={close}>세션 닫기</button></div> : phase === 'context' ? <>

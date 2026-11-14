@@ -1,3 +1,4 @@
+import {advancedScenarios} from './advanced.js';
 // Original beginner Japanese: ruby also provides the complete kana reading.
 const sentence = (scenarioId, index, [ruby, meaningKo, cueKo]) => {
   const text = ruby.map((part) => typeof part === 'string' ? part : part[0]).join('');
@@ -141,3 +142,4 @@ export const japaneseScenarios = [
     [[['紙', 'かみ'], 'に', ['書', 'か'], 'いてもらえますか。'], '종이에 써 주실 수 있나요?', '글로 안내 요청'],
   ]),
 ];
+japaneseScenarios.push(...advancedScenarios('ja'));

@@ -8,6 +8,13 @@
       "when": 1794603698713,
       "tag": "0000_outgoing_maginty",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1794634822034,
+      "tag": "0001_dark_scarlet_witch",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,5 @@
 /** Shared, presentation-independent contract for the sentence-first curriculum. */
-export const SUPPORTED_LANGUAGES = Object.freeze(['en', 'ja']);
+export const SUPPORTED_LANGUAGES = Object.freeze(['en', 'ja', 'es', 'it']);
 export const SENTENCES_PER_SCENARIO = 4;
 export const SCENARIO_IDS = Object.freeze([
   'cafe_order', 'restaurant_order', 'grocery_store', 'convenience_store',
@@ -7,6 +7,9 @@ export const SCENARIO_IDS = Object.freeze([
   'airport_checkin', 'hotel_checkin', 'taxi_ride', 'shopping_size',
   'return_exchange', 'meeting_intro', 'hobbies', 'family_plans',
   'work_schedule', 'weather_plans', 'asking_help',
+  'phone_booking', 'lost_property', 'food_allergy', 'home_repair',
+  'bank_visit', 'post_office', 'travel_disruption', 'work_problem',
+  'invitation_change', 'sharing_opinions',
 ]);
 export const SCENARIO_IMAGES = Object.freeze([
   '/images/books.svg', '/images/tea.svg', '/images/luggage.svg',

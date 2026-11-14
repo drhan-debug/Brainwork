@@ -1,4 +1,4 @@
-import { SCENARIO_IDS } from '../src/learning/schema.js';
+import { SCENARIO_IDS, SUPPORTED_LANGUAGES } from '../src/learning/schema.js';
 
 export class ApiError extends Error {
   constructor(status, code, message, state) { super(message); Object.assign(this, { status, code, state }); }
@@ -8,6 +8,7 @@ export const record = x => x !== null && typeof x === 'object' && !Array.isArray
 const integer = (x, min, max) => Number.isInteger(x) && x >= min && x <= max;
 const finite = (x, min = 0, max = 8640000000000000) => typeof x === 'number' && Number.isFinite(x) && x >= min && x <= max;
 export const WORDS = {
+  es: [], it: [],
   en: ['Serendipity','Bloom','Unwind','Wander','Savor','Reservation','Boarding pass','Destination','Luggage','Explore','Favorite','Hobby','Curious','Prefer','Grateful'],
   ja: ['ja-cafe-order','ja-cafe-takeout','ja-cafe-pay','ja-travel-station','ja-travel-ticket','ja-travel-reserve','ja-me-name','ja-me-hobby','ja-me-thanks'],
 };
@@ -20,7 +21,7 @@ export function profileInput(input) {
   if (!record(input)) fail('INVALID_PROFILE', 'A profile is required.');
   const {name, language, goal = 10, timezone = 'Asia/Seoul'} = input;
   if (typeof name !== 'string' || !name.trim() || name.trim().length > 60 || /[\u0000-\u001f]/u.test(name)) fail('INVALID_NAME', 'Name must contain 1–60 characters.');
-  if (!['en','ja'].includes(language)) fail('INVALID_LANGUAGE', 'Choose English or Japanese.');
+  if (!SUPPORTED_LANGUAGES.includes(language)) fail('INVALID_LANGUAGE', 'Choose a supported language.');
   if (!integer(goal, 1, 120)) fail('INVALID_GOAL', 'Daily goal must be 1–120 whole minutes.');
   if (typeof timezone !== 'string' || timezone.length > 80) fail('INVALID_TIMEZONE', 'Choose a valid time zone.');
   try { new Intl.DateTimeFormat('en', {timeZone: timezone}); } catch { fail('INVALID_TIMEZONE', 'Choose a valid time zone.'); }
@@ -113,7 +114,7 @@ export function importLearner(input, profile) {
     if (!dateKey(key) || !finite(value,0,1440)) fail('INVALID_IMPORT','Invalid local daily minutes.');
     out.dailyMinutes[key]=value;
   }
-  if (!record(input.sentenceProgress) || Object.keys(input.sentenceProgress).length>80) fail('INVALID_IMPORT','Invalid local sentence progress.');
+  if (!record(input.sentenceProgress) || Object.keys(input.sentenceProgress).length>SCENARIO_IDS.length*4) fail('INVALID_IMPORT','Invalid local sentence progress.');
   for (const [id,entry] of Object.entries(input.sentenceProgress)) {
     if (!validSentence(id,profile.language) || !record(entry) || !integer(entry.stage,0,5) || !finite(entry.dueAt) || !finite(entry.lastReviewedAt) || !['passed','failed'].includes(entry.lastOutcome)) fail('INVALID_IMPORT','Invalid local sentence progress.');
     out.sentenceProgress[id] = {stage:entry.stage,dueAt:entry.dueAt,lastReviewedAt:entry.lastReviewedAt,lastOutcome:entry.lastOutcome};

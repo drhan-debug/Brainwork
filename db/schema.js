@@ -1,4 +1,4 @@
-import {sqliteTable, text, integer, index, primaryKey} from 'drizzle-orm/sqlite-core';
+import {sqliteTable, text, integer, index, uniqueIndex, primaryKey} from 'drizzle-orm/sqlite-core';
 
 // Match the schema used by local Wrangler migrations. Table-level primary keys
 // preserve SQLite's existing nullability for single text primary-key columns.
@@ -36,3 +36,16 @@ export const authLimits = sqliteTable('auth_limits', {
   windowStart: integer('window_start').notNull(),
   attempts: integer('attempts').notNull(),
 }, table => [primaryKey({columns: [table.key]})]);
+
+export const feedback = sqliteTable('feedback', {
+ id: integer('id').primaryKey({autoIncrement:true}),
+ accountId:text('account_id').notNull().references(()=>accounts.id,{onDelete:'cascade'}),
+ submissionId:text('submission_id').notNull(),
+ category:text('category').notNull(),
+ message:text('message').notNull(),
+ language:text('language').notNull(),
+ scenarioId:text('scenario_id'),
+ page:text('page').notNull().default(''),
+ status:text('status').notNull().default('new'),
+ createdAt:integer('created_at').notNull(),
+},table=>[uniqueIndex('feedback_submission').on(table.accountId,table.submissionId),index('feedback_account_date').on(table.accountId,table.createdAt)]);
