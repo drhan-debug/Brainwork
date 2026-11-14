@@ -1,6 +1,6 @@
 # Bloom native account API
 
-All responses are JSON, `Cache-Control: no-store`. Send JSON and a same-origin `Origin` header for every mutation; browsers supply Origin for fetch. Cookie is opaque HttpOnly Secure SameSite=Lax, 30-day expiry. No ChatGPT identity dependency. Password 12–128 characters (512-byte cap). Email is case-insensitive. Email delivery and email verification are not configured; recovery uses a one-time random code shown at registration and after recovery.
+All responses are JSON, `Cache-Control: no-store`. Send JSON and a same-origin `Origin` header for every mutation; browsers supply Origin for fetch. Cookie is opaque HttpOnly Secure SameSite=Lax, 30-day expiry. No ChatGPT identity dependency. Password 4–128 characters (512-byte cap). Email is case-insensitive. Email delivery and email verification are not configured; recovery uses a one-time random code shown at registration and after recovery.
 
 ## State
 
@@ -21,7 +21,7 @@ All responses are JSON, `Cache-Control: no-store`. Send JSON and a same-origin `
 ## Authentication
 
 - `POST /api/auth/register`: `{email,password,name,language,goal?,timezone?}`. Name 1–60 chars, goal integer 1–120. Any Intl-valid IANA timezone accepted. Defaults 10/Asia/Seoul.
-- `POST /api/auth/login`: `{email,password}`.
+- `POST /api/auth/login`: `{email,password}`. Existing passwords remain valid; the new-password minimum is not applied to login.
 - `POST /api/auth/logout`: `{expectedAccountId}`.
 - `POST /api/auth/recover`: `{email,recoveryCode,newPassword}`. Invalidates every prior session and rotates recovery code; establishes a new session.
 
@@ -31,7 +31,7 @@ All responses are JSON, `Cache-Control: no-store`. Send JSON and a same-origin `
 
 `POST /api/progress`: Every operation has `{expectedAccountId,operationId,revision,type,...}`. operationId is a unique UUID or 16–100 character random identifier. Preserve it on retries. Server determines timestamps and scheduling in account timezone.
 
-- `type:'sentenceSession'`: `results:[{sentenceId:'en:cafe_order:1',passed:true},...], elapsedMs`. 1–240 attempts, sentences from account language only. Duplicate attempts are combined: any failure wins. Increments completed sessions and time once.
+- `type:'sentenceSession'`: `results:[{sentenceId:'en:cafe_order:1',passed:true},...], elapsedMs`. 1–240 attempts, sentences from account language only. English accepts the new `en:mom_v1_<theme>:1..5` catalog and preserved legacy `en:<scenario>:1..4`; Japanese accepts only the original `ja:<scenario>:1..4`. Duplicate attempts are combined: any failure wins. Increments completed sessions and time once.
 - `type:'wordAnswer'`: `wordKey,known:<boolean>,completed:<boolean>,elapsedMs`. Exact existing vocabulary key. Only completed=true increments sessions/time. Word schedule matches legacy UI (failed 10m; successful 1/3/7/14/30 days; early practice preserves due date).
 - `type:'dialogueSession'`: `elapsedMs`. Records one completed session/time.
 
@@ -46,3 +46,5 @@ Authenticated mutations require `expectedAccountId` captured from the UI account
 Error bodies `{code,error}`; revision conflicts also `{state:<current authenticated state>}`. 400 invalid input, 401 auth/recovery failure, 403 cross-origin, 404 unknown route, 405 wrong method, 409 email exists/revision conflict/import already used/language locked/operation reused with different data, 413 payload too large, 415 non-JSON, 429 auth throttled, 503 storage not configured.
 
 Progress/import use atomic revision checks plus idempotency records. On `REVISION_CONFLICT`, replace the current snapshot with `state`, then replay the same semantic operation with its original operationId and the new revision. A replay of an applied operation returns the CURRENT state without applying again. Same operationId with different payload (excluding revision) yields `OPERATION_REUSED`. Profile edits can explicitly retry against the returned revision. Never submit a full learner snapshot for normal progress.
+
+Sentence progress imports accept up to 180 registered English IDs (100 maternal + 80 legacy), or 80 registered Japanese IDs. Legacy English progress is retained under its original IDs and remains reviewable; it is never relabeled as maternal content.

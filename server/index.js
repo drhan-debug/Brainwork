@@ -11,7 +11,7 @@ const fromHex = str => Uint8Array.from(str.match(/../g)||[],x=>parseInt(x,16));
 const random = (size=32) => hex(crypto.getRandomValues(new Uint8Array(size)));
 const digest = async value => hex(new Uint8Array(await crypto.subtle.digest('SHA-256',encoder.encode(value))));
 function passwordInput(password) {
-  if (typeof password !== 'string' || [...password].length<12 || [...password].length>128 || encoder.encode(password).length>512) fail('INVALID_PASSWORD','Use a password of 12–128 characters.');
+  if (typeof password !== 'string' || [...password].length<4 || [...password].length>128 || encoder.encode(password).length>512) fail('INVALID_PASSWORD','Use a password of 4–128 characters.');
   return password;
 }
 async function passwordHash(password) {

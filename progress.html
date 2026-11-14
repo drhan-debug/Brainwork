@@ -13,38 +13,38 @@
 <body>
   <main>
     <header>
-      <div><div class="brand">BLOOM / WORK LOG</div><h1>계정과 함께, 학습을 이어서.</h1><p class="intro">ChatGPT 로그인 없이 열 수 있도록 Bloom 사이트를 공개했습니다.<br>학습 기록은 Bloom 자체 계정으로 로그인한 사용자별로 보호합니다. 토큰·쿠키 없이 공개 사이트 접속과 개인 기록의 인증 보호를 확인했습니다.</p></div>
-      <span class="live"><span class="dot" aria-hidden="true"></span>공개 접근 · HTTP 점검 통과</span>
+      <div><div class="brand">BLOOM / WORK LOG</div><h1>엄마의 일상에 맞춰, 더 자연스럽게.</h1><p class="intro">아이폰 카카오톡에서의 마이크 안내, 자연스러운 음성 재생과 문장, 다섯 살 아들을 둔 엄마를 위한 영어 학습을 개선했습니다. 새 변경의 독립 검증과 빌드를 통과했으며, 현재 공개 사이트 반영을 준비하고 있습니다.</p></div>
+      <span class="live"><span class="dot" aria-hidden="true"></span>구현·검증 완료 · 배포 준비</span>
     </header>
     <section class="hero" aria-labelledby="current-phase">
-      <div><div class="eyebrow">CURRENT PHASE</div><h2 id="current-phase">Bloom 회원가입·로그인과 개인별 기록</h2><p>이메일·비밀번호로 가입하는 Bloom 자체 계정을 선택했습니다. ChatGPT 로그인은 사용하지 않습니다.<br>개인별 프로필·학습 진도를 서버에 보관하고, 기존 영어·일본어 로컬 기록은 사용자가 명시적으로 선택해 가져옵니다.</p></div>
-      <div class="hero-side"><div class="eyebrow">PUBLIC ACCESS ENABLED</div><strong>ChatGPT 로그인 없이 접속</strong><small>공개 HTTP 점검 4/4 · 첫 화면·JS 정상 응답 · 개인 기록은 Bloom 로그인 필요</small></div>
+      <div><div class="eyebrow">CURRENT PHASE</div><h2 id="current-phase">음성 경험과 엄마 영어 과정 개선</h2><p>카카오톡 안에서 음성 인식이 지원되지 않을 때 Safari로 이어지는 안내를 보강했습니다. 기기에 설치된 음성을 선택하는 재생 흐름과 실제 육아 상황의 영어 100문장을 구현했습니다.</p></div>
+      <div class="hero-side"><div class="eyebrow">QA PASSED / PUBLICATION PENDING</div><strong>구현·독립 검증 통과</strong><small>음성·과정·계정·달력·정적 경로 총 56건 통과.<br>공개 사이트는 이전 v3 버전입니다.</small></div>
     </section>
-    <section class="stats" aria-label="확인된 작업 기준">
-      <div class="stat"><div class="label">실제 배포한 코드</div><div class="value"><code>af67cd2</code></div><div class="note">사이트 v3 코드 · 접근 설정만 공개로 변경 · 이 보고서는 별도 갱신</div></div>
-      <div class="stat"><div class="label">로컬 검증 통과</div><div class="value">15 + 13 + 9</div><div class="note">계정 통합 · 달력 사례 · 정적 경로 회귀</div></div>
-      <div class="stat"><div class="label">공개 HTTP 점검</div><div class="value">4 / 4</div><div class="note">무인증 첫 화면 · JS · 세션 · 기록 API 보호</div></div>
+    <section class="stats" aria-label="배포 기준과 새 작업 상태">
+      <div class="stat"><div class="label">현재 공개 배포 기준</div><div class="value"><code>af67cd2</code></div><div class="note">이전 v3 · 이번 개선은 아직 미배포</div></div>
+      <div class="stat"><div class="label">이전 버전 검증 기록</div><div class="value">37 + 4</div><div class="note">로컬 37건 · 공개 HTTP 4건 / 새 변경 검증과 구분</div></div>
+      <div class="stat"><div class="label">이번 변경의 검증</div><div class="value">56건 + 빌드 통과</div><div class="note">음성 12 · 과정 4 · D1 계정 18 · 달력 13 · 정적 경로 9</div></div>
     </section>
     <section aria-labelledby="work-title">
-      <div class="section-title"><h2 id="work-title">현재 작업</h2><span>진행률 대신 확인된 상태를 표시합니다</span></div>
+      <div class="section-title"><h2 id="work-title">현재 작업</h2><span>완료 여부는 실제 확인한 근거로 갱신합니다</span></div>
       <div class="panel">
-        <article class="task"><span class="number">01</span><div><h3>로그인 방식 확정</h3><p>Bloom 자체 이메일·비밀번호 회원가입과 로그인<br>메일 발송 없이 복구 코드로 계정 복구 구현</p></div><span class="status">방향 확정</span></article>
-        <article class="task"><span class="number">02</span><div><h3>기준 소스·작업 환경 확인</h3><p>실제 배포 코드 <code>af67cd2</code> · v3 코드 유지<br>이 페이지는 별도 외부 파일 없이 열 수 있는 단일 HTML</p></div><span class="status">확인 완료</span></article>
-        <article class="task"><span class="number">03</span><div><h3>백엔드·API 설계와 구현</h3><p>서버 D1 저장과 계정별 권한 구현 · 실제 D1 통합 테스트 15개 통과<br>기록 충돌·중복 요청을 다루는 버전 확인과 요청 식별 구조 적용</p></div><span class="status">구현 완료</span></article>
-        <article class="task"><span class="number">04</span><div><h3>프런트엔드 계정 경험</h3><p>가입·로그인·로그아웃·복구 코드와 저장 상태 표시 구현<br>실제 브라우저에서 가입부터 학습까지의 화면 검증은 대기</p></div><span class="status">구현 완료</span></article>
-        <article class="task"><span class="number">05</span><div><h3>기존 로컬 기록 가져오기</h3><p>현재 브라우저의 영어·일본어 기록을 사용자가 선택해 가져오기 구현<br>계정별 기록 분리와 중복 가져오기 방지 적용</p></div><span class="status">구현 완료</span></article>
-        <article class="task"><span class="number">06</span><div><h3>공개 접근·DB 연결</h3><p>ChatGPT 로그인 없이 첫 화면·JS HTTP 200 · 공개 점검 4개 통과<br><code>accounts</code> · <code>auth_limits</code> · <code>operations</code> · <code>sessions</code> 실제 테이블 확인</p></div><span class="status">배포 확인</span></article>
-        <article class="task"><span class="number">07</span><div><h3>독립 계정·기록 QA</h3><p>실제 D1 통합 테스트 15개·달력 사례 13개 통과<br>정적 경로 회귀 테스트 9개 통과 · 공개 HTTP 점검 4개 통과<br>실제 브라우저 UI 검증은 실행 환경 문제로 미실행</p></div><span class="status pending">일부 통과</span></article>
-        <article class="task"><span class="number">08</span><div><h3>성장과 학습의 연속성</h3><p>기존 영어·일본어 학습과 복습 흐름 보존<br>계정에 쌓이는 학습 진도와 성장 경험 연결<br>달력 기반 성장 표시 구현 · 학습 활동 이후 프로필 언어 유지</p></div><span class="status">구현 완료</span></article>
+        <article class="task"><span class="number">01</span><div><h3>아이폰 카카오톡 마이크 안내</h3><p>지원되지 않는 환경 구분과 Safari에서 여는 방법 안내 구현<br>공유 음성 흐름 검증 통과 · 실제 아이폰 마이크 동작은 미확인</p></div><span class="status">구현·검증</span></article>
+        <article class="task"><span class="number">02</span><div><h3>기기에 설치된 음성으로 자연스럽게 듣기</h3><p>언어와 설치된 음성을 고려하는 TTS 선택·재생 구현<br>자동 검증 통과 · 기기별 실제 음질은 직접 확인 필요</p></div><span class="status">구현·검증</span></article>
+        <article class="task"><span class="number">03</span><div><h3>한국어 학습 안내 다듬기</h3><p>한국어 안내와 학습 문장을 자연스럽게 정리<br>영어 100문장의 문맥·힌트·대체 표현 검토 완료</p></div><span class="status">구현·검증</span></article>
+        <article class="task"><span class="number">04</span><div><h3>비밀번호 최소 길이 변경</h3><p>관련 화면과 서버의 비밀번호 최소 길이를 4자로 통일<br>실제 D1 계정 통합 검증 18건 통과</p></div><span class="status">구현·검증</span></article>
+        <article class="task"><span class="number">05</span><div><h3>엄마를 위한 영어 20개 주제 × 5문장</h3><p>다섯 살 아들과 보내는 일상 영어 100문장 구성·문장 검토 완료<br>기존 영어 20개 주제 × 4문장과 별도 과정·문장 ID 적용</p></div><span class="status">구현·검증</span></article>
+        <article class="task"><span class="number">06</span><div><h3>기존 기록과 일본어 과정 보존</h3><p>이전 영어 과정의 별도 카탈로그·ID와 학습 기록 보존<br>일본어 과정 유지 · 과정·계정 회귀 검증 통과</p></div><span class="status">검증 통과</span></article>
+        <article class="task"><span class="number">07</span><div><h3>통합 QA와 빌드</h3><p>음성 12건·과정 4건·실제 D1 계정 18건 통과<br>달력 13건·정적 경로 9건·최신 프로덕션 빌드 통과</p></div><span class="status">56건 통과</span></article>
+        <article class="task"><span class="number">08</span><div><h3>최종 배포와 공개 사이트 확인</h3><p>검증 완료한 변경을 커밋·패키징한 뒤 공개 사이트 반영 예정<br>현재 공개 사이트는 기존 v3 코드 <code>af67cd2</code></p></div><span class="status pending">배포 전</span></article>
       </div>
     </section>
     <div class="bottom">
-      <section class="info"><h2>이전 단계에서 확인한 결과</h2><p>문장 중심 영어·일본어 세션의 브라우저 테스트 30/30, 모바일·파비콘 집중 테스트 3/3, 프로덕션 빌드 통과 기록이 있습니다. 이 결과는 이전 학습 기능에 대한 검증이며, 현재 추가하는 회원가입·로그인·서버 기록 기능의 통과 결과가 아닙니다.</p></section>
-      <section class="info"><h2>기록 보호 원칙</h2><p>기존 브라우저의 영어·일본어 프로필과 학습 기록을 보존하는 것이 기준입니다. 새 계정의 서버 기록은 사용자별로 분리합니다. 기존 로컬 기록을 자동으로 계정에 합치지 않고, 사용자가 가져오기를 선택하는 흐름을 구현했습니다.</p></section>
-      <section class="info"><h2>운영 검증과 남은 확인</h2><p>공개 전 비공개 v3에서 첫 화면 HTML과 JS가 HTTP 200을 반환했습니다. 위조 세션은 비인증으로 처리되고, 없는 계정의 로그인은 401로 거절되어 운영 HTTP 점검 4개가 통과했습니다. 실제 호스팅 DB 테이블 4개도 확인했습니다. 로컬에서는 실제 D1 통합 테스트 15개·달력 사례 13개·정적 경로 회귀 테스트 9개와 프로덕션 빌드가 통과했습니다. 달력 사례는 호스트 시간대 3곳에서 확인했습니다. 이번 버전의 실제 가입·로그인·기기 간 기록 공유를 포함한 브라우저 UI 검증은 실행 환경 문제로 수행하지 못했습니다. 소유자의 명시적인 승인에 따라 사이트 접근을 공개로 변경했습니다. ChatGPT 로그인 없이 사이트에 접근할 수 있으며, 개인 학습 기록은 Bloom 자체 계정 인증이 필요합니다. 공개 후 토큰·쿠키 없이 별도 HTTP 점검 4개가 통과했습니다. 첫 화면은 로그인 리다이렉트 없이 200, JS는 200, 세션은 비인증 상태를 반환하고, 유효한 Origin의 기록 저장 요청은 401 AUTH_REQUIRED로 거절되었습니다. 이 공개 점검 4개는 앞선 비공개 점검과 별도로 표시하며, 전체 브라우저 사용 흐름 검증을 뜻하지 않습니다.</p></section>
-      <section class="info"><h2>현재 사이트와 진행 현황</h2><p style="margin-bottom:8px"><a href="https://bloom-brainwork.workspace-554491.chatgpt.site" target="_blank" rel="noopener noreferrer">Bloom 사이트 열기</a> · ChatGPT 로그인 불필요 · Bloom 계정으로 개인 기록 보호</p><p>이 화면은 저장소·로컬에서 여는 단일 HTML 보고서이며, 배포 앱에 포함된 화면은 아닙니다. 자동 새로고침을 켜 두면 20초마다 이후 업데이트를 표시합니다. 완료 표시는 확인된 작업에만 사용하며, 시간은 미국 로스앤젤레스 기준입니다.</p></section>
+      <section class="info"><h2>이전 배포에서 확인한 결과</h2><p>v3 기준으로 실제 D1 계정 통합 15건, 달력 사례 13건, 정적 경로 회귀 9건과 프로덕션 빌드가 통과했습니다. 공개 후 토큰·쿠키 없는 HTTP 점검 4건으로 첫 화면·JS 응답과 개인 기록 API의 인증 보호를 확인했습니다. 이 결과는 이번 음성·교육과정 변경의 검증 결과와 별도로 보관하는 이전 기록입니다.</p></section>
+      <section class="info"><h2>학습 기록 보존 기준</h2><p>기존 영어 80문장과 새 엄마 영어 100문장을 서로 다른 카탈로그와 ID로 구분합니다. 이전 학습 기록을 새 문장에 잘못 연결하지 않는 것이 기준입니다. 일본어 과정과 기존 기록을 유지하며, 과정·계정 통합 검증에서 기존 기록과 과정 구분을 확인했습니다.</p></section>
+      <section class="info"><h2>음성 기능 확인 범위</h2><p>브라우저의 음성 인식 지원과 기기에 설치된 TTS 음성은 환경마다 다릅니다. 카카오톡에서 마이크를 쓸 수 없을 때의 Safari 안내와 공유 음성 로직은 자동 검증을 통과했습니다. 브라우저 테스트 코드는 새 과정에 맞춰 수정하고 문법을 확인했지만, CUA 실행 오류로 전체 브라우저 테스트는 실행하지 못했습니다. 실제 아이폰 카카오톡·Safari 마이크와 설치 음성의 음질은 미확인입니다.</p></section>
+      <section class="info"><h2>현재 사이트와 진행 현황</h2><p style="margin-bottom:8px"><a href="https://bloom-brainwork.workspace-554491.chatgpt.site" target="_blank" rel="noopener noreferrer">현재 공개된 Bloom 사이트 열기</a> · 이전 v3 · ChatGPT 로그인 불필요</p><p>이 화면은 저장소·로컬에서 여는 단일 HTML 보고서이며 배포 앱에 포함된 화면은 아닙니다. 외부 파일 없이 열 수 있고, 자동 새로고침을 켜 두면 20초마다 저장된 변경을 표시합니다. 시간은 미국 로스앤젤레스 기준입니다.</p></section>
     </div>
-    <footer><div>마지막 업데이트 <time datetime="2026-11-13T19:08:51-08:00">2026. 11. 13. 19:08 PST</time> · America/Los_Angeles</div><label class="refresh"><input id="auto-refresh" type="checkbox" checked>20초마다 자동 새로고침</label></footer>
+    <footer><div>마지막 업데이트 <time datetime="2026-11-14T00:19:47-08:00">2026. 11. 14. 00:19 PST</time> · America/Los_Angeles</div><label class="refresh"><input id="auto-refresh" type="checkbox" checked>20초마다 자동 새로고침</label></footer>
   </main>
   <script>
     (() => {

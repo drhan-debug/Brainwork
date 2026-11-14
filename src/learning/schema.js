@@ -8,6 +8,30 @@ export const SCENARIO_IDS = Object.freeze([
   'return_exchange', 'meeting_intro', 'hobbies', 'family_plans',
   'work_schedule', 'weather_plans', 'asking_help',
 ]);
+// IDs are permanent: the maternal catalog never reuses a legacy English ID.
+export const EN_MATERNAL_SCENARIO_IDS = Object.freeze([
+  'mom_v1_morning_start', 'mom_v1_get_dressed', 'mom_v1_breakfast',
+  'mom_v1_brushing_teeth', 'mom_v1_preschool_dropoff', 'mom_v1_preschool_pickup',
+  'mom_v1_talking_teacher', 'mom_v1_playground_turns', 'mom_v1_playground_safety',
+  'mom_v1_playdate_arranging', 'mom_v1_playdate_welcome', 'mom_v1_toy_conflict',
+  'mom_v1_big_feelings', 'mom_v1_tidying_up', 'mom_v1_meal_out',
+  'mom_v1_shopping_together', 'mom_v1_road_safety', 'mom_v1_bath_time',
+  'mom_v1_bedtime', 'mom_v1_doctor_allergy',
+]);
+export function scenarioSentenceCount(lang, scenarioId) {
+  if (!SUPPORTED_LANGUAGES.includes(lang)) return 0;
+  if (SCENARIO_IDS.includes(scenarioId)) return SENTENCES_PER_SCENARIO;
+  return lang === 'en' && EN_MATERNAL_SCENARIO_IDS.includes(scenarioId) ? 5 : 0;
+}
+export function sentenceIdsForLanguage(lang) {
+  const scenarios = lang === 'en' ? [...EN_MATERNAL_SCENARIO_IDS, ...SCENARIO_IDS] : lang === 'ja' ? SCENARIO_IDS : [];
+  return scenarios.flatMap(id => Array.from({length:scenarioSentenceCount(lang,id)}, (_,i) => `${lang}:${id}:${i+1}`));
+}
+export function isKnownSentenceId(id, lang) {
+  if (typeof id !== 'string') return false;
+  const parts = id.split(':');
+  return parts.length === 3 && parts[0] === lang && /^[1-5]$/u.test(parts[2]) && Number(parts[2]) <= scenarioSentenceCount(lang, parts[1]);
+}
 export const SCENARIO_IMAGES = Object.freeze([
   '/images/books.svg', '/images/tea.svg', '/images/luggage.svg',
   '/images/travel.svg', '/images/forest.svg', '/images/airport.svg',
@@ -33,9 +57,9 @@ const result = errors => ({ valid: errors.length === 0, errors });
 
 export function makeSentenceId(lang, scenarioId, position) {
   if (!SUPPORTED_LANGUAGES.includes(lang)) throw new RangeError(`Unsupported language: ${lang}`);
-  if (!SCENARIO_IDS.includes(scenarioId)) throw new RangeError(`Unknown scenario: ${scenarioId}`);
-  if (!Number.isInteger(position) || position < 1 || position > SENTENCES_PER_SCENARIO) {
-    throw new RangeError(`Sentence position must be 1–${SENTENCES_PER_SCENARIO}`);
+  if (!scenarioSentenceCount(lang, scenarioId)) throw new RangeError(`Unknown scenario: ${scenarioId}`);
+  if (!Number.isInteger(position) || position < 1 || position > scenarioSentenceCount(lang, scenarioId)) {
+    throw new RangeError(`Sentence position must be 1–${scenarioSentenceCount(lang, scenarioId)}`);
   }
   return `${lang}:${scenarioId}:${position}`;
 }
@@ -48,8 +72,8 @@ export function validateSentence(sentence, { lang, scenarioId, position } = {}) 
   }
   const parts = typeof sentence.id === 'string' ? sentence.id.split(':') : [];
   if (parts.length !== 3 || !SUPPORTED_LANGUAGES.includes(parts[0]) ||
-      !SCENARIO_IDS.includes(parts[1]) || !/^[1-4]$/u.test(parts[2] || '')) {
-    errors.push('id must have the form language:scenarioId:position (1–4).');
+      !isKnownSentenceId(sentence.id, parts[0])) {
+    errors.push('id must have the form language:scenarioId:position (within the registered catalog).');
   }
   if (lang !== undefined && parts[0] !== lang) errors.push(`id language must be ${lang}.`);
   if (scenarioId !== undefined && parts[1] !== scenarioId) errors.push(`id scenario must be ${scenarioId}.`);
@@ -85,15 +109,16 @@ export function validateSentence(sentence, { lang, scenarioId, position } = {}) 
 export function validateScenario(scenario, { lang, index } = {}) {
   const errors = [];
   if (!isRecord(scenario)) return result(['Scenario must be an object.']);
-  if (!SCENARIO_IDS.includes(scenario.id)) errors.push('id must be a shared scenario ID.');
-  if (index !== undefined && scenario.id !== SCENARIO_IDS[index]) {
-    errors.push(`Scenario ${index + 1} must be ${SCENARIO_IDS[index]}.`);
-  }
+  const scenarioLang = lang ?? scenario.sentences?.[0]?.id?.split(':')[0];
+  const count = scenarioSentenceCount(scenarioLang, scenario.id);
+  if (!count) errors.push('id must belong to the language catalog.');
+  const expectedIds = scenarioLang === 'en' && EN_MATERNAL_SCENARIO_IDS.includes(scenario.id) ? EN_MATERNAL_SCENARIO_IDS : SCENARIO_IDS;
+  if (index !== undefined && scenario.id !== expectedIds[index]) errors.push(`Scenario ${index + 1} must be ${expectedIds[index]}.`);
   if (!isLine(scenario.titleKo)) errors.push('titleKo must be a nonempty single-line string.');
   if (!SCENARIO_IMAGES.includes(scenario.image)) errors.push('image must use an existing original /images SVG.');
   if (!Array.isArray(scenario.sentences)) return result([...errors, 'sentences must be an array.']);
-  if (scenario.sentences.length !== SENTENCES_PER_SCENARIO) {
-    errors.push(`Scenario must contain exactly ${SENTENCES_PER_SCENARIO} sentences.`);
+  if (scenario.sentences.length !== count) {
+    errors.push(`Scenario must contain exactly ${count} sentences.`);
   }
   scenario.sentences.forEach((sentence, sentenceIndex) => {
     const checked = validateSentence(sentence, { lang, scenarioId: scenario.id, position: sentenceIndex + 1 });
@@ -107,7 +132,9 @@ export function validateCurriculum(scenarios, lang) {
   if (!SUPPORTED_LANGUAGES.includes(lang)) errors.push(`Unsupported language: ${lang}.`);
   if (!Array.isArray(scenarios)) return result([...errors, 'Curriculum must be an array of scenarios.']);
   if (scenarios.length !== SCENARIO_IDS.length) errors.push(`Curriculum must contain ${SCENARIO_IDS.length} scenarios.`);
+  const expectedIds = lang === 'en' && scenarios.some(scene => EN_MATERNAL_SCENARIO_IDS.includes(scene?.id)) ? EN_MATERNAL_SCENARIO_IDS : SCENARIO_IDS;
   scenarios.forEach((scenario, index) => {
+    if (scenario?.id !== expectedIds[index]) errors.push(`Scenario ${index + 1} must be ${expectedIds[index]}.`);
     const checked = validateScenario(scenario, { lang, index });
     errors.push(...checked.errors.map(error => `Scenario ${index + 1}: ${error}`));
   });

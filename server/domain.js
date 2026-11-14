@@ -1,4 +1,4 @@
-import { SCENARIO_IDS } from '../src/learning/schema.js';
+import { isKnownSentenceId, sentenceIdsForLanguage } from '../src/learning/schema.js';
 
 export class ApiError extends Error {
   constructor(status, code, message, state) { super(message); Object.assign(this, { status, code, state }); }
@@ -11,11 +11,7 @@ export const WORDS = {
   en: ['Serendipity','Bloom','Unwind','Wander','Savor','Reservation','Boarding pass','Destination','Luggage','Explore','Favorite','Hobby','Curious','Prefer','Grateful'],
   ja: ['ja-cafe-order','ja-cafe-takeout','ja-cafe-pay','ja-travel-station','ja-travel-ticket','ja-travel-reserve','ja-me-name','ja-me-hobby','ja-me-thanks'],
 };
-export function validSentence(id, lang) {
-  if (typeof id !== 'string') return false;
-  const parts = id.split(':');
-  return parts.length === 3 && parts[0] === lang && SCENARIO_IDS.includes(parts[1]) && /^[1-4]$/.test(parts[2]);
-}
+export function validSentence(id, lang) { return isKnownSentenceId(id, lang); }
 export function profileInput(input) {
   if (!record(input)) fail('INVALID_PROFILE', 'A profile is required.');
   const {name, language, goal = 10, timezone = 'Asia/Seoul'} = input;
@@ -113,7 +109,7 @@ export function importLearner(input, profile) {
     if (!dateKey(key) || !finite(value,0,1440)) fail('INVALID_IMPORT','Invalid local daily minutes.');
     out.dailyMinutes[key]=value;
   }
-  if (!record(input.sentenceProgress) || Object.keys(input.sentenceProgress).length>80) fail('INVALID_IMPORT','Invalid local sentence progress.');
+  if (!record(input.sentenceProgress) || Object.keys(input.sentenceProgress).length>sentenceIdsForLanguage(profile.language).length) fail('INVALID_IMPORT','Invalid local sentence progress.');
   for (const [id,entry] of Object.entries(input.sentenceProgress)) {
     if (!validSentence(id,profile.language) || !record(entry) || !integer(entry.stage,0,5) || !finite(entry.dueAt) || !finite(entry.lastReviewedAt) || !['passed','failed'].includes(entry.lastOutcome)) fail('INVALID_IMPORT','Invalid local sentence progress.');
     out.sentenceProgress[id] = {stage:entry.stage,dueAt:entry.dueAt,lastReviewedAt:entry.lastReviewedAt,lastOutcome:entry.lastOutcome};

@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { build } from 'esbuild';
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 import { applyProgress, blankLearner } from '../server/domain.js';
+import { sentenceIdsForLanguage } from '../src/learning/schema.js';
 
 const root = new URL('..', import.meta.url).pathname;
 const temporary = await mkdtemp(join(tmpdir(), 'brainwork-accounts-test-'));
@@ -89,6 +90,29 @@ try {
     assert.equal(rows.results.length, 2);
     for (const row of rows.results) { assert.notEqual(row.password_hash, password); assert.notEqual(row.recovery_hash, recoveryCode); }
   });
+  await test('four-character passwords register, log in and recover; three-character new passwords fail without consuming recovery', async () => {
+    const actor = client(), login = client(), recoverer = client();
+    const email = 'short-password@example.test';
+    expectStatus(await actor.request('/api/auth/register', { method: 'POST', body: { ...account(email), password: 'abc' } }), 400);
+    const registered = expectStatus(await actor.request('/api/auth/register', { method: 'POST', body: { ...account(email), password: 'abcd' } }), 201);
+    const code = registered.recoveryCode;
+    expectStatus(await login.request('/api/auth/login', { method: 'POST', body: { email, password: 'abc' } }), 401);
+    const logged = expectStatus(await login.request('/api/auth/login', { method: 'POST', body: { email, password: 'abcd' } }), 200);
+    assert.equal(logged.account.id, registered.account.id);
+    expectStatus(await recoverer.request('/api/auth/recover', { method: 'POST', body: { email, recoveryCode: code, newPassword: 'xyz' } }), 400);
+    assert.equal((await session(actor)).account.id, registered.account.id);
+    const recovered = expectStatus(await recoverer.request('/api/auth/recover', { method: 'POST', body: { email, recoveryCode: code, newPassword: 'wxyz' } }), 200);
+    assert.equal(recovered.account.id, registered.account.id);
+    assert.deepEqual(await session(actor), { authenticated: false });
+    expectStatus(await login.request('/api/auth/login', { method: 'POST', body: { email, password: 'abcd' } }), 401);
+    expectStatus(await login.request('/api/auth/login', { method: 'POST', body: { email, password: 'wxyz' } }), 200);
+  });
+  await test('four Unicode characters count as four and three Unicode characters remain too short', async () => {
+    const actor = client(), email = 'unicode-password@example.test';
+    expectStatus(await actor.request('/api/auth/register', { method: 'POST', body: { ...account(email), password: '😀😀😀' } }), 400);
+    expectStatus(await actor.request('/api/auth/register', { method: 'POST', body: { ...account(email), password: '😀😀😀😀' } }), 201);
+    expectStatus(await client().request('/api/auth/login', { method: 'POST', body: { email, password: '😀😀😀😀' } }), 200);
+  });
   await test('CSRF rejects foreign/missing origins and non-JSON mutations', async () => {
     const before = await session(a);
     for (const Origin of ['https://evil.test', 'null', '']) expectStatus(await a.request('/api/progress', { method: 'POST', body: op('csrf', before.revision), headers: { Origin } }), 403);
@@ -158,6 +182,22 @@ try {
     expectStatus(await b.request('/api/import', { method: 'POST', body: { ...body, operationId: 'integration-import-second', revision: after.revision } }), 409);
     expectStatus(await b.request('/api/profile', { method: 'PATCH', body: { revision: after.revision, profile: { ...after.profile, language: 'en' } } }), 409);
     assert.deepEqual(await session(b), after);
+  });
+  await test('D1 import retains all 180 English sentence records and new fifth-sentence outcomes coexist with legacy history', async () => {
+    const actor = client();
+    const initial = expectStatus(await actor.request('/api/auth/register', { method: 'POST', body: account('full-curriculum@example.test') }), 201);
+    const learner = blankLearner(initial.profile);
+    for (const id of sentenceIdsForLanguage('en')) learner.sentenceProgress[id] = { stage: 1, dueAt: 1000, lastReviewedAt: 500, lastOutcome: 'passed' };
+    const imported = expectStatus(await actor.request('/api/import', { method: 'POST', body: { operationId: 'integration-full-curriculum-import', revision: initial.revision, source: 'wife', learner } }), 200);
+    assert.deepEqual(imported.learner.sentenceProgress, learner.sentenceProgress);
+    const maternal = 'en:mom_v1_morning_start:5';
+    const after = expectStatus(await actor.request('/api/progress', { method: 'POST', body: op('maternal-with-legacy', imported.revision, { type: 'sentenceSession', results: [{ sentenceId: maternal, passed: true }, { sentenceId: 'en:cafe_order:1', passed: true }] }) }), 200);
+    assert.equal(after.learner.sentenceProgress[maternal].stage, 2);
+    assert.equal(after.learner.sentenceProgress['en:cafe_order:1'].stage, 2);
+    assert.equal(Object.keys(after.learner.sentenceProgress).length, 180);
+    assert.deepEqual(await session(actor), after);
+    for (const sentenceId of ['en:cafe_order:5', 'en:mom_v1_morning_start:6', 'ja:mom_v1_morning_start:1']) expectStatus(await actor.request('/api/progress', { method: 'POST', body: op(`invalid-id-${sentenceId.replaceAll(':', '-')}`, after.revision, { type: 'sentenceSession', results: [{ sentenceId, passed: true }] }) }), 400);
+    assert.deepEqual(await session(actor), after);
   });
   await test('invalid durations/results and full snapshot attempts cannot overwrite server learning state', async () => {
     const before = await session(a);
