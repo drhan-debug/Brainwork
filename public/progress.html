@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+
+<title>Bloom · 작업 진행 보드</title>
+<style>
+:root{--ink:#203329;--muted:#576b60;--green:#18644a;--line:#d8e2d9;--paper:#fff;--bg:#f2f5ef;--amber:#7b4707;--red:#9a352c}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 system-ui,-apple-system,"Segoe UI",sans-serif}main{max-width:1120px;margin:auto;padding:40px 24px 56px}a{color:var(--green);text-underline-offset:3px}a:focus-visible,button:focus-visible{outline:3px solid #327ac0;outline-offset:4px}header{display:flex;justify-content:space-between;align-items:flex-start;gap:24px}.eyebrow{font-size:.8rem;font-weight:750;letter-spacing:.1em;color:var(--green);margin:0}h1{font-size:clamp(2rem,5vw,3.25rem);letter-spacing:-.055em;line-height:1.15;margin:10px 0 16px}h2{font-size:1.25rem;margin:0 0 16px}p{margin:8px 0}.subtitle{color:var(--muted);max-width:700px}.refresh{flex-shrink:0;background:var(--green);color:#fff;border:0;border-radius:10px;padding:12px 16px;font:inherit;font-weight:650;cursor:pointer}.phase{background:#e4eee1;border:1px solid #c4d7c2;border-radius:16px;padding:22px 24px;margin:28px 0 20px}.phase strong{font-size:1.15rem}.meta{font-size:.85rem;color:var(--muted)}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:20px 0 30px}.stat{border:1px solid var(--line);background:var(--paper);padding:18px 22px;border-radius:12px}.stat b{display:block;font-size:2rem;line-height:1.2}.stat span{font-size:.9rem;color:var(--muted)}.card{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:24px;margin-top:20px}.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;text-align:left;min-width:760px}caption{text-align:left;color:var(--muted);font-size:.9rem;padding-bottom:14px}th{font-size:.8rem;color:var(--muted);font-weight:650;padding:10px 12px;border-bottom:1px solid var(--line)}td{font-size:.9rem;padding:18px 12px;vertical-align:top;border-bottom:1px solid #edf1eb}tr:last-child td{border-bottom:0}td:first-child{width:22%;font-weight:700}td:nth-child(2){width:13%}td:nth-child(3){width:25%}td:nth-child(4){width:27%}.tag{display:inline-block;white-space:nowrap;font-size:.78rem;font-weight:750;padding:3px 10px;border-radius:999px;background:#edf0ec;color:#4d6255}.tag.active{background:#e6f0fb;color:#205d92}.tag.done{background:#e1f0e6;color:#176443}.tag.blocked{background:#fae9e3;color:var(--red)}.grid{display:grid;grid-template-columns:1.2fr 1fr;gap:20px}.grid .card{height:calc(100% - 20px)}ul,ol{padding-left:22px;margin:0}li+li{margin-top:12px}.blocker{border-left:4px solid #c66635;background:#fff8ef}.blocker code{overflow-wrap:anywhere}.note{font-size:.9rem;color:var(--muted)}footer{margin-top:24px;color:var(--muted);font-size:.85rem}.result{display:flex;gap:12px;align-items:baseline;flex-wrap:wrap}code{font-size:.85em}noscript p{padding:12px;background:#fff3d6}@media(max-width:700px){main{padding:24px 16px 40px}header{display:block}.refresh{margin-top:16px}.stats{gap:8px}.stat{padding:14px 10px}.stat b{font-size:1.7rem}.grid{grid-template-columns:1fr;gap:0}.card{padding:18px}.phase{padding:18px}table{min-width:720px}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<main>
+<header><div><p class="eyebrow">BLOOM / LIVE WORK LOG</p><h1>짧게 배우고,<br>다시 말할 수 있도록.</h1><p class="subtitle">Bloom 후속 개발 진행상황 · 지휘자가 계획과 배분을 맡고, 작업자가 구현합니다. 확인된 변경과 검증 결과만 반영합니다.</p></div><button class="refresh" type="button" onclick="window.refreshBloomBoard()">최신 보고 읽기 ↻</button></header><p class="meta" id="sync-status" role="status" aria-live="polite">내장된 마지막 보고를 표시합니다. 원격 최신 보고를 확인 중입니다.</p><div id="board-content" data-board="bloom-progress-v1">
+<section class="phase" aria-labelledby="phase-title"><p class="eyebrow">현재 단계</p><p id="phase-title"><strong id="phase">핵심 학습 기능 3개 병행 구현</strong></p><p class="meta">보고 갱신: <time id="updated" datetime="2026-11-14T06:29:11+00:00">2026-11-14 06:29:11 UTC · 원격 갱신 및 전달 경로 점검 반영</time><br>15초마다 GitHub의 최신 보고를 확인합니다. 연결이 없으면 마지막 보고를 유지합니다. 시간에 따라 진척을 만들지 않습니다.</p></section>
+<section class="stats" aria-label="작업 상태 합계"><div class="stat"><b id="done-count">2</b><span>완료</span></div><div class="stat"><b id="active-count">4</b><span>진행</span></div><div class="stat"><b id="pending-count">0</b><span>대기</span></div><div class="stat"><b id="blocked-count">0</b><span>차단된 작업</span></div></section>
+<section class="card" aria-labelledby="tasks-title"><h2 id="tasks-title">작업 배분과 검증</h2><div class="table-wrap" tabindex="0" role="region" aria-label="작업표. 작은 화면에서는 좌우로 이동할 수 있습니다."><table><caption>구현 작업 6개 · 별도 배포 장애 2건은 아래에 표시합니다.</caption><thead><tr><th scope="col">작업</th><th scope="col">담당</th><th scope="col">목표</th><th scope="col">검증 기준</th><th scope="col">상태</th></tr></thead><tbody>
+<tr data-task="audit" data-status="done"><td>01 저장소·아키텍처 점검</td><td>audit 작업자</td><td>기준 PR과 기존 구조 확인, 작업 경계 확정</td><td>기준 소스 점검과 기준 검증 통과 · 지휘자 보고 확인</td><td><span class="tag done">완료</span></td></tr>
+<tr data-task="progress" data-status="done"><td>02 HTML 진행 보드</td><td>progress 작업자</td><td>단일 파일로 실제 진행과 장애를 계속 표시</td><td>단일 HTML·6개 작업·15초 원격 갱신·오프라인 보존·외부 실행 의존 없음 확인</td><td><span class="tag done">완료</span></td></tr>
+<tr data-task="daily" data-status="active"><td>03 오늘의 5분 학습</td><td>daily 작업자</td><td>복습을 우선하는 짧은 계획, 상황별 블록 유지</td><td>계획 생성·학습 이동·완료 흐름 확인</td><td><span class="tag active">진행</span></td></tr>
+<tr data-task="retry" data-status="active"><td>04 틀린 구절 재연습</td><td>retry 작업자</td><td>실패 구절 텍스트 연습 후 전체 문장 재시도</td><td>재시도 경로와 실패 이력 유지 확인</td><td><span class="tag active">진행</span></td></tr>
+<tr data-task="variations" data-status="active"><td>05 표현 바꿔 말하기</td><td>variations 작업자</td><td>검증된 템플릿 범위에서 교체 연습</td><td>지원 템플릿·표현 교체·제외 조건 확인</td><td><span class="tag active">진행</span></td></tr>
+<tr data-task="release" data-status="active"><td>06 통합검증·PR·배포</td><td>release 작업자</td><td>배포 접근/전달경로 점검 진행</td><td>프로젝트 검사·핵심 사용자 흐름·PR 및 배포 결과 증거</td><td><span class="tag active">진행</span></td></tr>
+</tbody></table></div></section>
+<section class="card blocker" aria-labelledby="blockers-title"><h2 id="blockers-title">배포 장애 · 미해결 2건</h2><ul><li><strong>Sites 저장소 쓰기 자격 증명:</strong> <code>project_not_found</code>. 정상 자격 증명 발급을 확인하기 전까지 해결로 표시하지 않습니다.</li><li><strong>운영자 계정 ID:</strong> 운영자 account ID가 연결되지 않았습니다. 연결과 동작 확인이 필요합니다.</li></ul><p class="note">기능 구현 상태와 배포 가능 여부는 별개입니다. 현재 배포 완료 근거는 없습니다.</p></section>
+<div class="grid"><section class="card" aria-labelledby="decisions-title"><h2 id="decisions-title">결정 기록</h2><ol id="decisions"><li>기존 4개 언어 · 30개 상황 · 120개 문장, 단계 학습과 피드백함을 기준으로 후속 기능을 구성합니다.</li><li>오늘의 계획은 복습을 먼저 제안하고, 학습 항목은 상황별 블록을 유지합니다.</li><li>실패한 구절을 텍스트로 연습한 뒤 전체 문장을 다시 시도합니다. 실패 이력은 보존합니다.</li><li>표현 교체는 검증된 템플릿으로 한정합니다.</li></ol></section><section class="card" aria-labelledby="results-title"><h2 id="results-title">완료 결과와 근거</h2><div id="results"><p class="result"><span class="tag">기준</span><a href="https://github.com/drhan-debug/Brainwork/pull/3" target="_blank" rel="noopener noreferrer">기존 구현 PR #3 ↗</a></p><p class="result"><span class="tag done">완료</span><span>저장소·아키텍처 기준 점검 및 검증 통과</span></p><p class="result"><span class="tag done">완료</span><a href="https://raw.githubusercontent.com/drhan-debug/Brainwork/feat/progressive-curriculum-feedback/public/progress.html">단일 HTML 진행 보드 원본 다운로드</a></p><p class="note">보드 원본과 public/progress.html을 동기화했습니다. 최신 보고는 GitHub 원본에서 읽습니다. 다운로드한 파일도 온라인 상태에서 최신 보고를 반영하며, 오프라인에서는 내장 또는 마지막 보고를 표시합니다.</p></div></section></div>
+</div><footer>상태 변경은 지휘자의 확인된 보고를 받아 이 파일에 저장합니다. 자동 새로고침은 저장된 최신 보고를 읽는 용도입니다.</footer>
+<noscript><p>JavaScript가 꺼져 있어 내장된 보고만 표시합니다. 최신 보고는 GitHub 원본 링크에서 확인할 수 있습니다.</p></noscript>
+</main>
+<script>
+(function(){
+'use strict';
+const source='https://raw.githubusercontent.com/drhan-debug/Brainwork/feat/progressive-curriculum-feedback/public/progress.html';
+const status=document.getElementById('sync-status');
+let inFlight=false;
+function recount(){for(const state of ['done','active','pending','blocked']){document.getElementById(state+'-count').textContent=document.querySelectorAll('#board-content [data-status="'+state+'"]').length;}}
+function safeBoard(html){
+ const parsed=new DOMParser().parseFromString(html,'text/html');
+ const board=parsed.querySelector('#board-content[data-board="bloom-progress-v1"]');
+ if(!board||board.querySelectorAll('[data-task]').length!==6)throw new Error('보드 형식 확인 실패');
+ board.querySelectorAll('script,iframe,object,embed,link,meta,base,form,style').forEach(node=>node.remove());
+ for(const node of board.querySelectorAll('*')){
+  for(const attr of [...node.attributes]){
+   const name=attr.name.toLowerCase();
+   if(name.startsWith('on')||['src','srcdoc','style','action','formaction','xlink:href'].includes(name))node.removeAttribute(attr.name);
+   if(name==='href'){
+    try{const url=new URL(attr.value,source);if(url.protocol!=='https:'||!['github.com','raw.githubusercontent.com'].includes(url.hostname))node.removeAttribute(attr.name);else node.setAttribute('href',url.href);}catch(_){node.removeAttribute(attr.name);}
+   }
+  }
+ }
+ return board;
+}
+async function refresh(){
+ if(inFlight)return;
+ inFlight=true;
+ const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),10000);
+ try{
+  const response=await fetch(source,{cache:'no-store',credentials:'omit',signal:controller.signal});
+  if(!response.ok)throw new Error('HTTP '+response.status);
+  const next=safeBoard(await response.text());
+  document.getElementById('board-content').replaceChildren(...[...next.childNodes].map(node=>document.importNode(node,true)));
+  recount();status.textContent='온라인 · 최신 보고 확인 '+new Date().toLocaleTimeString('ko-KR')+' · 15초마다 재확인';
+ }catch(_){status.textContent='오프라인 또는 갱신 실패 · 마지막 보고를 유지합니다. 15초 후 다시 확인합니다.';}
+ finally{clearTimeout(timeout);inFlight=false;}
+}
+window.refreshBloomBoard=refresh;recount();refresh();setInterval(refresh,15000);
+})();
+</script>
+</body>
+</html>
