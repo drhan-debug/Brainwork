@@ -103,6 +103,72 @@ try{
  await test('scheduling retains early due dates and aggregates any failure across attempts',async()=>{
   const id='en:cafe_order:1',original={[id]:{stage:3,dueAt:fixed+86400000,custom:'keep'}};const next=recordSentenceOutcome(original,id,{passed:true,at:fixed});assert.equal(next[id].dueAt,original[id].dueAt);assert.equal(next[id].stage,3);assert.equal(next[id].custom,'keep');assert.deepEqual(aggregateSentenceResults([{sentenceId:id,passed:true},{sentenceId:id,passed:false},{sentenceId:id,passed:true}]),[{sentenceId:id,passed:false}]);assert.deepEqual(getDueSentenceIds({...original,'en:cafe_order:2':{dueAt:fixed},obsolete:{dueAt:0}},fixed,[id,'en:cafe_order:2']),['en:cafe_order:2']);
  });
+ await test('review due IDs are oldest first with stable insertion ties and exclude invalid schedules',async()=>{
+  const [first,second,third,fourth]=englishScenarios[0].sentences.map(s=>s.id);
+  const progress={[third]:{dueAt:fixed-100},[second]:{dueAt:fixed-100},[first]:{dueAt:fixed-300},[fourth]:{dueAt:fixed+1},obsolete:{dueAt:0},invalid:{dueAt:NaN}};
+  assert.deepEqual(getDueSentenceIds(progress,fixed,[first,second,third,fourth,'invalid']),[first,third,second]);
+ });
+ await test('review mobile cues use accessible collapsed details with Korean meanings and no target answers',async()=>{
+  const scene=englishScenarios[0],sentences=scene.sentences.slice(0,3),profile={name:'복습 학습자',goal:10};
+  const learner={...blankLearner(profile),sentenceProgress:Object.fromEntries(sentences.map((s,i)=>[s.id,{stage:1,dueAt:fixed-(i+1)*1000}]))};
+  const{page,context}=await fixture({saved:null,mobile:true,profiles:{version:2,active:'wife',learners:{wife:learner,husband:blankLearner(profile)}}});
+  try{
+   await page.getByRole('button',{name:'복습 노트',exact:true}).click();
+   const row=page.locator('.sentence-review-row').filter({has:page.getByRole('heading',{name:scene.titleKo,exact:true})});
+   const details=row.locator('details'),summary=row.getByLabel(scene.titleKo+' 한국어 뜻 보기',{exact:true});
+   assert.equal(await details.count(),1);
+   assert.equal(await details.getAttribute('open'),null,'recall cues begin collapsed');
+   for(const sentence of sentences)assert.equal(await row.getByText(sentence.meaningKo,{exact:true}).isVisible(),false);
+   await summary.focus();await page.keyboard.press('Enter');
+   assert.notEqual(await details.getAttribute('open'),null,'keyboard activates native details');
+   for(const sentence of sentences)assert.ok(await details.getByText(sentence.meaningKo,{exact:true}).isVisible());
+   const text=await row.innerText();for(const sentence of scene.sentences)assert.ok(!text.includes(sentence.text),'due scenario does not reveal English target');
+   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'expanded cues fit 390px');
+   await summary.focus();await page.keyboard.press('Enter');assert.equal(await details.getAttribute('open'),null);
+   await row.getByRole('button',{name:scene.titleKo+' 문장 복습 시작',exact:true}).click();
+   assert.equal(await dialog(page).locator('.session-context li').count(),sentences.length,'review action still opens only due sentences');
+  }finally{await context.close();}
+ });
+ for(const account of [false,true])await test(`review ${account?'account timezone differs from browser':'demo browser timezone'} schedule is earliest first with stable ties and upcoming catalog CTA at 390px`,async()=>{
+  const scene=englishScenarios[0],sentences=scene.sentences.slice(0,4),early=fixed+60000,late=fixed+86400000;
+  const profile={name:'일정 학습자',language:'en',goal:10,timezone:'Asia/Seoul'};
+  // Insert reversed tie IDs: equal dates must keep curriculum order, not map insertion order.
+  const learner={...blankLearner(profile),sentenceProgress:{[sentences[3].id]:{stage:1,dueAt:late},[sentences[2].id]:{stage:1,dueAt:early},[sentences[1].id]:{stage:1,dueAt:early},[sentences[0].id]:{stage:1,dueAt:late}}};
+  const remote={authenticated:true,account:{id:'review-test-account',email:'review@example.test'},profile,learner,revision:0,imports:[]};
+  const unexpected=[];
+  const apiRoute=account?async route=>{const req=route.request();if(new URL(req.url()).pathname==='/api/session'&&req.method()==='GET')return route.fulfill({json:remote});unexpected.push(req.method()+' '+new URL(req.url()).pathname);return route.fulfill({status:500,json:{code:'UNEXPECTED_TEST_REQUEST'}});}:null;
+  const{page,context}=await fixture({saved:null,mobile:true,apiRoute,profiles:account?null:{version:2,active:'wife',learners:{wife:learner,husband:blankLearner(profile)}}});
+  try{
+   await page.getByRole('button',{name:'복습 노트',exact:true}).click();
+   const section=page.getByRole('region',{name:'문장 복습',exact:true}),empty=section.locator('.sentence-empty');
+   assert.equal(await section.locator('.sentence-review-row').count(),0,'all scheduled reviews are in the future');
+   const upcoming=empty.locator('time');assert.equal(await upcoming.count(),1);assert.equal(await upcoming.getAttribute('datetime'),new Date(early).toISOString());
+   const zone=account?profile.timezone:'America/New_York';
+   const expected=new Intl.DateTimeFormat('ko-KR',{dateStyle:'medium',timeStyle:'short',timeZone:zone}).format(early);
+   assert.equal(await upcoming.innerText(),expected,'next review uses learner timezone, including the local date boundary');
+   if(account)assert.notEqual(expected,new Intl.DateTimeFormat('ko-KR',{dateStyle:'medium',timeStyle:'short',timeZone:'America/New_York'}).format(early));
+   const schedule=section.locator('details.sentence-schedule');await schedule.locator('summary').click();
+   assert.deepEqual(await schedule.locator('.sentence-schedule-row strong').allTextContents(),[sentences[1].text,sentences[2].text,sentences[0].text,sentences[3].text],'earliest future schedule first, tied dates keep curriculum order');
+   for(const row of await schedule.locator('.sentence-schedule-row').all()){
+    const target=await row.locator('strong').innerText(),at=learner.sentenceProgress[sentences.find(s=>s.text===target).id].dueAt;
+    assert.ok((await row.innerText()).includes(new Intl.DateTimeFormat('ko-KR',{dateStyle:'medium',timeStyle:'short',timeZone:zone}).format(at)));
+   }
+   assert.ok((await section.innerText()).includes(zone),'display identifies the timezone');
+   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'expanded schedule fits 390px');
+   const cta=empty.getByRole('button',{name:'새로운 상황 배우기',exact:true});await cta.focus();await page.keyboard.press('Enter');
+   assert.ok(await page.getByRole('heading',{name:'아이와 함께하는 20가지 상황',exact:true}).isVisible(),'empty-state CTA opens learning catalog');
+   assert.equal(await dialog(page).count(),0,'catalog CTA lets the learner choose a situation');assert.deepEqual(unexpected,[]);
+  }finally{await context.close();}
+ });
+ await test('review unstarted learner has catalog CTA without a fabricated next review',async()=>{
+  const{page,context}=await fixture({saved:null,mobile:true});
+  try{
+   await page.getByRole('button',{name:'복습 노트',exact:true}).click();const empty=page.locator('.sentence-empty');
+   assert.equal(await empty.locator('time').count(),0);
+   await empty.getByRole('button',{name:'새로운 상황 배우기',exact:true}).click();
+   assert.ok(await page.getByRole('heading',{name:'아이와 함께하는 20가지 상황',exact:true}).isVisible());
+  }finally{await context.close();}
+ });
  await test('unavailable speech APIs offer typed fallback and textual mismatch feedback',async()=>{
   const{page,context}=await fixture({saved:null});await page.evaluate(()=>{delete window.SpeechRecognition;delete window.webkitSpeechRecognition;delete window.SpeechSynthesisUtterance;});await start(page,{learner:'husband'});await click(page,dialog(page).getByRole('button',{name:'뜻을 확인했어요 · 듣기 시작'}));assert.ok(await dialog(page).getByText(/음성 재생을 지원하지 않아요/).isVisible());for(let i=0;i<4;i++)await click(page,dialog(page).getByRole('button',{name:'다음으로 →'}));await click(page,dialog(page).getByRole('button',{name:'마이크로 말하기'}));assert.ok(await dialog(page).getByText(/음성 인식을 지원하지 않아요/).isVisible());await answer(page,japaneseScenarios[0].sentences[0],{wrong:true});assert.ok(await dialog(page).locator('ruby rt').count()>0);await context.close();
  });
