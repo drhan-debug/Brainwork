@@ -10,6 +10,8 @@ let serverLog='';
 server.stdout.on('data',d=>serverLog+=d);
 server.stderr.on('data',d=>serverLog+=d);
 const base='http://127.0.0.1:4179';
+async function enterDemo(page){await page.getByRole('button',{name:'이 브라우저의 로컬 데모 열기',exact:true}).click();await page.getByLabel('학습자 선택').waitFor();}
+
 const browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||'/usr/bin/chromium',headless:true,args:['--no-sandbox']});
 const errors=[];
 let failures=0;
@@ -32,7 +34,7 @@ async function fixture(saved=legacy,viewport={width:1440,height:1000},profiles=n
   },{saved,profiles});
   const page=await context.newPage();
   page.on('pageerror',error=>errors.push(error.message));
-  await page.goto(base);
+  await page.goto(base);await enterDemo(page);
   await page.getByLabel('학습자 선택').waitFor();
   return {page,context};
 }
@@ -58,7 +60,7 @@ try{
     assert.deepEqual(await page.evaluate(()=>JSON.parse(localStorage.getItem('bloom-state'))),legacy);
     assert.deepEqual(migrated.learners.husband.learned,[]);
     assert.equal(migrated.learners.husband.sessions,0);
-    await page.reload();
+    await page.reload();await enterDemo(page);
     assert.deepEqual((await state(page)).learners,migrated.learners);
     await context.close();
   });
@@ -66,10 +68,10 @@ try{
     const {page,context}=await fixture(null);
     await choose(page,'husband');
     assert.equal((await state(page)).active,'husband');
-    await page.reload();
+    await page.reload();await enterDemo(page);
     assert.equal(await page.getByLabel('학습자 선택').inputValue(),'husband');
     await page.evaluate(()=>{localStorage.removeItem('bloom-profiles-v2');localStorage.setItem('bloom-state','broken json');});
-    await page.reload();
+    await page.reload();await enterDemo(page);
     await page.getByLabel('학습자 선택').waitFor();
     assert.deepEqual((await state(page)).learners.wife.learned,[]);
     await context.close();
@@ -166,7 +168,7 @@ try{
     await page.getByLabel('학습자 선택').evaluate(el=>{el.value='wife';el.dispatchEvent(new Event('change',{bubbles:true}));});
     assert.equal(await page.getByRole('dialog').count(),0,'programmatic profile switch closes active lesson');
     assert.deepEqual((await state(page)).learners.wife,english);
-    await page.reload();
+    await page.reload();await enterDemo(page);
     await choose(page,'husband');
     stored=await state(page);
     assert.equal(stored.learners.husband.name,'일본어 학습자');
@@ -254,7 +256,7 @@ try{
         s.learners.husband.reviewStages={'ja-cafe-order':stage};
         localStorage.setItem('bloom-profiles-v2',JSON.stringify(s));
       },{stage});
-      await page.reload();
+      await page.reload();await enterDemo(page);
       await page.getByRole('button',{name:'복습 노트',exact:true}).click();
       await page.getByRole('button',{name:'복습 시작하기',exact:true}).click();
       const dialog=page.getByRole('dialog');
@@ -266,7 +268,7 @@ try{
       assert.equal(data.reviewStages['ja-cafe-order'],Math.min(stage+1,5));
     }
     await page.evaluate(()=>{const s=JSON.parse(localStorage.getItem('bloom-profiles-v2'));s.learners.husband.reviews['ja-cafe-order']=Date.now()-1;localStorage.setItem('bloom-profiles-v2',JSON.stringify(s));});
-    await page.reload();
+    await page.reload();await enterDemo(page);
     await page.getByRole('button',{name:'복습 노트',exact:true}).click();
     await page.getByRole('button',{name:'복습 시작하기',exact:true}).click();
     await page.getByRole('button',{name:/뜻 확인하기/}).click();
@@ -303,7 +305,7 @@ try{
       s.learners.husband.reviewStages={'ja-cafe-order':3};
       localStorage.setItem('bloom-profiles-v2',JSON.stringify(s));
     },{future});
-    await page.reload();
+    await page.reload();await enterDemo(page);
     for(const mode of ['오늘의 학습 시작하기','듣고 따라 말하기','문장 떠올리기']){
       await (mode==='오늘의 학습 시작하기'?page.locator('.course-card').first():page.getByRole('button',{name:new RegExp(mode)})).click();
       const dialog=page.getByRole('dialog');
@@ -326,7 +328,7 @@ try{
     const reset=(await state(page)).learners.husband;
     assert.equal(reset.reviewStages['ja-cafe-order'],0);
     assert.ok(Math.abs(reset.reviews['ja-cafe-order']-before-600000)<3000);
-    await page.reload();
+    await page.reload();await enterDemo(page);
     assert.equal((await state(page)).learners.husband.reviews['ja-cafe-order'],reset.reviews['ja-cafe-order']);
     await context.close();
   });
@@ -334,7 +336,7 @@ try{
     const {page:english,context}=await fixture(null);
     const japanese=await context.newPage();
     japanese.on('pageerror',error=>errors.push(error.message));
-    await japanese.goto(base);
+    await japanese.goto(base);await enterDemo(japanese);
     await choose(japanese,'husband');
     assert.equal(await english.getByLabel('학습자 선택').inputValue(),'wife','another tab keeps its selected learner');
     async function settings(page,name,goal){
@@ -396,7 +398,7 @@ try{
     assert.equal(saved.learners.husband.goal,20);
     assert.deepEqual(saved.learners.husband.learned,['ja-cafe-order','ja-cafe-takeout']);
     for(const page of [english,japanese]){
-      await page.reload();
+      await page.reload();await enterDemo(page);
       await page.getByLabel('학습자 선택').waitFor();
       assert.deepEqual((await state(page)).learners,saved.learners,'both records survive reload');
     }
@@ -406,7 +408,7 @@ try{
     const {page:english,context}=await fixture(null);
     const japanese=await context.newPage();
     japanese.on('pageerror',error=>errors.push(error.message));
-    await japanese.goto(base);
+    await japanese.goto(base);await enterDemo(japanese);
     await choose(japanese,'husband');
     const startedAt=Date.now();
     await english.clock.setFixedTime(startedAt);

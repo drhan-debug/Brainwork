@@ -1,5 +1,6 @@
 import { scryptAsync } from '@noble/hashes/scrypt.js';
 import { ApiError, fail, record, profileInput, blankLearner, hasActivity, applyProgress, importLearner } from './domain.js';
+import {feedbackApi} from './feedback.js';
 
 const SESSION_MS = 30*86400000;
 const COOKIE = '__Host-bloom_session';
@@ -170,8 +171,9 @@ async function updateAccount(db,row,body,path,sessionHash) {
 export async function api(request,env) {
   const url=new URL(request.url),path=url.pathname;
   const methods={'/api/session':'GET','/api/auth/register':'POST','/api/auth/login':'POST','/api/auth/logout':'POST','/api/auth/recover':'POST','/api/profile':'PATCH','/api/progress':'POST','/api/import':'POST'};
-  if(!methods[path])fail('NOT_FOUND','API endpoint not found.',404);
-  if(request.method!==methods[path])fail('METHOD_NOT_ALLOWED','Method not allowed.',405);
+  const feedbackMethods={'/api/feedback':['GET','POST'],'/api/feedback/inbox':['GET'],'/api/feedback/status':['PATCH']};
+  if(!methods[path]&&!feedbackMethods[path])fail('NOT_FOUND','API endpoint not found.',404);
+  if(feedbackMethods[path]?!feedbackMethods[path].includes(request.method):request.method!==methods[path])fail('METHOD_NOT_ALLOWED','Method not allowed.',405);
   if(!env.DB)fail('STORAGE_UNAVAILABLE','Account storage is not configured.',503);
   const db=env.DB;
   if(request.method!=='GET') {
@@ -181,6 +183,11 @@ export async function api(request,env) {
   if(['/api/auth/register','/api/auth/login','/api/auth/recover'].includes(path))return authenticate(request,db,body,path.split('/').at(-1));
   const session=await findSession(request,db);
   if(path==='/api/session')return response(session?state(session.row):{authenticated:false});
+  if(feedbackMethods[path]){
+    if(!session)fail('AUTH_REQUIRED','Sign in to your Bloom account.',401);
+    if(body&&body.expectedAccountId!==session.row.id)fail('ACCOUNT_CHANGED','The signed-in account changed.',409);
+    return response(await feedbackApi(request,db,session.row,body,env));
+  }
   if(session && body.expectedAccountId!==session.row.id)fail('ACCOUNT_CHANGED','The signed-in account changed. Sign in again before continuing.',409);
   if(path==='/api/auth/logout'){
     if(session)await db.prepare('DELETE FROM sessions WHERE token_hash=?').bind(session.tokenHash).run();

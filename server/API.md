@@ -46,3 +46,15 @@ Authenticated mutations require `expectedAccountId` captured from the UI account
 Error bodies `{code,error}`; revision conflicts also `{state:<current authenticated state>}`. 400 invalid input, 401 auth/recovery failure, 403 cross-origin, 404 unknown route, 405 wrong method, 409 email exists/revision conflict/import already used/language locked/operation reused with different data, 413 payload too large, 415 non-JSON, 429 auth throttled, 503 storage not configured.
 
 Progress/import use atomic revision checks plus idempotency records. On `REVISION_CONFLICT`, replace the current snapshot with `state`, then replay the same semantic operation with its original operationId and the new revision. A replay of an applied operation returns the CURRENT state without applying again. Same operationId with different payload (excluding revision) yields `OPERATION_REUSED`. Profile edits can explicitly retry against the returned revision. Never submit a full learner snapshot for normal progress.
+
+
+## Feedback
+
+- `POST /api/feedback`: signed-in account plus same-origin JSON, `expectedAccountId`, `submissionId` (16–100 URL-safe characters), `category` (`bug|content|suggestion`), `message` (1–2000 characters), `language` (`en|ja|es|it`), optional `scenarioId` (valid shared ID or null), optional `page` (up to 100 characters). Returns `{id,saved:true}`. Ten new submissions per account per rolling 24 hours; duplicate IDs return the existing record, changed payloads return 409. Feedback does not mutate learner revisions.
+- `GET /api/feedback`: only this account's latest 25 feedback messages. Optional `before=<positive integer id>` cursor and `status=new|planned|shipped`. Returns `{items,nextCursor,canReview}`. No author emails are included.
+- `GET /api/feedback/inbox`: same pagination, but includes all accounts and `authorEmail`. Requires session account ID equal to server-only `FEEDBACK_ADMIN_ACCOUNT_ID`; otherwise 403.
+- `PATCH /api/feedback/status`: admin only, same origin and expected account, `{feedbackId,status}` with `new|planned|shipped`. Returns updated ID/status. No public role-assignment endpoint exists.
+
+Deployment owner must confirm the actual Bloom account and configure its immutable ID. Unverified email identifiers never grant admin access. There is no email delivery integration in this feature.
+
+Curriculum now accepts thirty shared scenario IDs for each of `en`, `ja`, `es`, `it`; existing IDs are retained. Legacy word operations remain available only for English/Japanese.
