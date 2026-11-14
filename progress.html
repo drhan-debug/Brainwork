@@ -13,17 +13,17 @@
 <body>
   <main>
     <header>
-      <div><div class="brand">BLOOM / WORK LOG</div><h1>엄마의 일상에 맞춰, 더 자연스럽게.</h1><p class="intro">아이폰 카카오톡에서의 마이크 안내, 자연스러운 음성 재생과 문장, 다섯 살 아들을 둔 엄마를 위한 영어 학습을 개선했습니다. 새 변경의 독립 검증과 빌드를 통과했고, 공개 사이트 v4 배포와 배포 후 HTTP 점검을 마쳤습니다.</p></div>
-      <span class="live"><span class="dot" aria-hidden="true"></span>v4 공개 배포 · HTTP 8/8 통과</span>
+      <div><div class="brand">BLOOM / WORK LOG</div><h1>엄마의 일상에 맞춰, 더 자연스럽게.</h1><p class="intro">전체화면 레슨의 저장 실패 재시도 버튼을 완료 화면 안으로 옮겼습니다. 계정·로컬 데모의 재시도와 중복 기록 방지를 독립 상호작용 테스트로 확인하고, 공개 사이트 v5에 배포했습니다.</p></div>
+      <span class="live"><span class="dot" aria-hidden="true"></span>v5 공개 배포 · HTTP 8/8 통과</span>
     </header>
     <section class="hero" aria-labelledby="current-phase">
-      <div><div class="eyebrow">CURRENT PHASE</div><h2 id="current-phase">음성 경험과 엄마 영어 과정 개선</h2><p>카카오톡 안에서 음성 인식이 지원되지 않을 때 Safari로 이어지는 안내를 보강했습니다. 기기에 설치된 음성을 선택하는 재생 흐름과 실제 육아 상황의 영어 100문장을 구현했습니다.</p></div>
-      <div class="hero-side"><div class="eyebrow">V4 DEPLOYED / PUBLIC HTTP VERIFIED</div><strong>공개 사이트 v4 반영 완료</strong><small>음성·과정·계정·달력·정적 경로 총 56건 통과.<br>배포 후 독립 HTTP 점검 8/8 통과.</small></div>
+      <div><div class="eyebrow">CURRENT PHASE</div><h2 id="current-phase">레슨 저장 재시도 수정 완료</h2><p>저장 상태와 재시도 버튼이 활성 전체화면 포털 안에 있습니다. 실패한 계정 요청은 같은 작업 ID로 다시 보내며, 로컬 데모도 기존 대기 기록만 다시 저장합니다.</p></div>
+      <div class="hero-side"><div class="eyebrow">V5 DEPLOYED / PUBLIC HTTP VERIFIED</div><strong>공개 사이트 v5 반영 완료</strong><small>기존 회귀 56건 + 새 상호작용 2건 통과.<br>배포 후 공개 HTTP 점검 8/8 통과.</small></div>
     </section>
     <section class="stats" aria-label="배포 기준과 새 작업 상태">
-      <div class="stat"><div class="label">현재 공개 배포 기준</div><div class="value"><code>e6aeabc</code></div><div class="note">v4 공개 배포 완료 · 이 보고서는 별도 갱신</div></div>
-      <div class="stat"><div class="label">v4 공개 HTTP 검증</div><div class="value">8 / 8</div><div class="note">배포 파일 일치 · 새 내용 반영 · 인증·비밀번호 검증</div></div>
-      <div class="stat"><div class="label">이번 변경의 검증</div><div class="value">56건 + 빌드 통과</div><div class="note">음성 12 · 과정 4 · D1 계정 18 · 달력 13 · 정적 경로 9</div></div>
+      <div class="stat"><div class="label">현재 공개 배포 기준</div><div class="value"><code>a5187ac</code></div><div class="note">v5 공개 배포 완료 · 이 보고서는 별도 갱신</div></div>
+      <div class="stat"><div class="label">v5 공개 HTTP 검증</div><div class="value">8 / 8</div><div class="note">HTML·JS·CSS 일치 · 딥링크 · 비로그인 API 보호</div></div>
+      <div class="stat"><div class="label">이번 변경의 검증</div><div class="value">58건 + 빌드 통과</div><div class="note">기존 56건 · ReactDOM/jsdom 상호작용 2건</div></div>
     </section>
     <section aria-labelledby="work-title">
       <div class="section-title"><h2 id="work-title">현재 작업</h2><span>완료 여부는 실제 확인한 근거로 갱신합니다</span></div>
@@ -35,16 +35,18 @@
         <article class="task"><span class="number">05</span><div><h3>엄마를 위한 영어 20개 주제 × 5문장</h3><p>다섯 살 아들과 보내는 일상 영어 100문장 구성·AI 편집 검토 완료<br>기존 영어 20개 주제 × 4문장과 별도 과정·문장 ID 적용</p></div><span class="status">구현·검증</span></article>
         <article class="task"><span class="number">06</span><div><h3>기존 기록과 일본어 과정 보존</h3><p>이전 영어 과정의 별도 카탈로그·ID와 학습 기록 보존<br>일본어 과정 유지 · 과정·계정 회귀 검증 통과</p></div><span class="status">검증 통과</span></article>
         <article class="task"><span class="number">07</span><div><h3>통합 QA와 빌드</h3><p>음성 12건·과정 4건·실제 D1 계정 18건 통과<br>달력 13건·정적 경로 9건·최신 프로덕션 빌드 통과</p></div><span class="status">56건 통과</span></article>
-        <article class="task"><span class="number">08</span><div><h3>최종 배포와 공개 사이트 확인</h3><p>공개 v4 배포 완료 · 코드 <code>e6aeabc</code><br>실제 HTML·JS와 빌드 파일 일치 · 공개 HTTP 점검 8/8 통과</p></div><span class="status">배포 확인</span></article>
+        <article class="task"><span class="number">08</span><div><h3>v4 배포와 공개 사이트 확인</h3><p>이전 공개 v4 배포 · 코드 <code>e6aeabc</code><br>당시 공개 HTTP 점검 8/8 통과</p></div><span class="status">이력 보존</span></article>
+        <article class="task"><span class="number">09</span><div><h3>완료 화면 저장 재시도 수정</h3><p>계정 503 실패 후 포털 안 재시도·같은 작업 ID·중복 세션 없음 확인<br>로컬 저장 실패 후 재시도·중복 세션 없음 확인 · 수정 전 기준 코드에서는 두 테스트 모두 실패</p></div><span class="status">2건 통과</span></article>
+        <article class="task"><span class="number">10</span><div><h3>v5 배포와 공개 사이트 확인</h3><p>코드 <code>a5187ac</code> · 빌드 및 루트 D1 마이그레이션 포함 패키지 확인<br>공개 HTML·JS·CSS 빌드 바이트 일치, 딥링크·비로그인 API 포함 HTTP 8/8 통과</p></div><span class="status">배포 확인</span></article>
       </div>
     </section>
     <div class="bottom">
-      <section class="info"><h2>v4 공개 배포에서 확인한 결과</h2><p>공개 v4의 HTML·JS가 배포 빌드와 일치하고, 엄마 영어·카카오톡 안내·4자 비밀번호 변경이 게시된 것을 확인했습니다. 비인증 세션 응답과 개인 기록 저장의 401 거절도 확인했습니다. 존재하지 않는 계정의 복구 요청은 3자 비밀번호에 INVALID_PASSWORD, 4자에 INVALID_RECOVERY를 반환했습니다. 독립 HTTP 점검 8건이 통과했으며, 실제 가입·로그인 전체 화면 조작이나 아이폰 마이크 사용 검증을 뜻하지 않습니다.</p></section>
+      <section class="info"><h2>v5 공개 배포에서 확인한 결과</h2><p>공개 v5의 HTML·JS·CSS·파비콘이 로컬 빌드와 일치하고, 딥링크와 HEAD 요청이 정상 응답합니다. 비로그인 세션은 비인증 상태를 반환하며 개인 기록 저장은 401로 거절했습니다. 공개 HTTP 점검 8건이 통과했습니다. ReactDOM/jsdom 검증은 실제 브라우저 화면 조작이나 아이폰 마이크 사용 검증을 뜻하지 않습니다.</p></section>
       <section class="info"><h2>학습 기록 보존 기준</h2><p>기존 영어 80문장과 새 엄마 영어 100문장을 서로 다른 카탈로그와 ID로 구분합니다. 이전 학습 기록을 새 문장에 잘못 연결하지 않는 것이 기준입니다. 일본어 과정과 기존 기록을 유지하며, 과정·계정 통합 검증에서 기존 기록과 과정 구분을 확인했습니다.</p></section>
-      <section class="info"><h2>음성 기능 확인 범위</h2><p>브라우저의 음성 인식 지원과 기기에 설치된 TTS 음성은 환경마다 다릅니다. 카카오톡 내장 브라우저에서는 마이크 기능을 지원하지 않을 수 있어 Safari로 열도록 안내합니다. 이 안내와 공유 음성 로직은 자동 검증을 통과했습니다. 브라우저 테스트 코드는 새 과정에 맞춰 수정하고 문법을 확인했지만, CUA 실행 오류로 전체 브라우저 테스트는 실행하지 못했습니다. 실제 아이폰 카카오톡·Safari 마이크와 설치 음성의 음질은 미확인입니다.</p></section>
-      <section class="info"><h2>현재 사이트와 진행 현황</h2><p style="margin-bottom:8px"><a href="https://bloom-brainwork.workspace-554491.chatgpt.site" target="_blank" rel="noopener noreferrer">현재 공개된 Bloom 사이트 열기</a> · v4 배포 완료 · ChatGPT 로그인 불필요</p><p>이 화면은 저장소·로컬에서 여는 단일 HTML 보고서이며 배포 앱에 포함된 화면은 아닙니다. 외부 파일 없이 열 수 있고, 자동 새로고침을 켜 두면 20초마다 저장된 변경을 표시합니다. 시간은 미국 로스앤젤레스 기준입니다.</p></section>
+      <section class="info"><h2>음성 기능 확인 범위</h2><p>브라우저의 음성 인식 지원과 기기에 설치된 TTS 음성은 환경마다 다릅니다. 카카오톡 내장 브라우저에서는 마이크 기능을 지원하지 않을 수 있어 Safari로 열도록 안내합니다. 이 안내와 공유 음성 로직은 자동 검증을 통과했습니다. 저장 재시도는 ReactDOM/jsdom으로 확인했으며, 이전 CUA 실행 오류로 실제 브라우저 전체 흐름은 확인하지 못했습니다. 실제 아이폰 카카오톡·Safari 마이크와 설치 음성의 음질은 미확인입니다.</p></section>
+      <section class="info"><h2>현재 사이트와 진행 현황</h2><p style="margin-bottom:8px"><a href="https://bloom-brainwork.workspace-554491.chatgpt.site" target="_blank" rel="noopener noreferrer">현재 공개된 Bloom 사이트 열기</a> · v5 배포 완료 · ChatGPT 로그인 불필요</p><p>이 화면은 저장소·로컬에서 여는 단일 HTML 보고서이며 배포 앱에 포함된 화면은 아닙니다. 외부 파일 없이 열 수 있고, 자동 새로고침을 켜 두면 20초마다 저장된 변경을 표시합니다. 시간은 미국 로스앤젤레스 기준입니다.</p></section>
     </div>
-    <footer><div>마지막 업데이트 <time datetime="2026-11-14T00:21:53-08:00">2026. 11. 14. 00:21 PST</time> · America/Los_Angeles</div><label class="refresh"><input id="auto-refresh" type="checkbox" checked>20초마다 자동 새로고침</label></footer>
+    <footer><div>마지막 업데이트 <time datetime="2026-11-14T08:16:41-08:00">2026. 11. 14. 08:16 PST</time> · America/Los_Angeles</div><label class="refresh"><input id="auto-refresh" type="checkbox" checked>20초마다 자동 새로고침</label></footer>
   </main>
   <script>
     (() => {
