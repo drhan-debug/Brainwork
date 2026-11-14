@@ -8,9 +8,16 @@ import { englishScenarios } from '../src/content/scenarios.en.js';
 import { japaneseScenarios } from '../src/content/scenarios.ja.js';
 import { validateCurriculum, SCENARIO_IDS, EN_MATERNAL_SCENARIO_IDS, makeSentenceId, getNextSentence } from '../src/learning/schema.js';
 import { recordSentenceOutcome, getDueSentenceIds, aggregateSentenceResults } from '../src/learning/schedule.js';
-const server=spawn('npm',['run','dev','--','--port','4179'],{cwd:new URL('..',import.meta.url),stdio:'pipe',detached:true});
+const port=process.env.TEST_PORT||'4179';
+const server=spawn('npm',['run','dev','--','--port',port],{cwd:new URL('..',import.meta.url),stdio:'pipe',detached:true});
 let serverLog='';server.stdout.on('data',d=>serverLog+=d);server.stderr.on('data',d=>serverLog+=d);
-const base='http://127.0.0.1:4179';
+const base=`http://127.0.0.1:${port}`;
+// v5 enters the existing local learner experience through the account gateway.
+async function enterLocalDemo(page) {
+ await page.getByRole('button',{name:'이 브라우저의 로컬 데모 열기',exact:true}).click();
+ await page.getByLabel('학습자 선택').waitFor();
+}
+
 const browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||'/usr/bin/chromium',headless:true,args:['--no-sandbox']});
 const errors=[];let failures=0;let passes=0;
 const fixed=Date.parse('2026-11-14T04:30:00Z'); // 23:30 in America/New_York: next local day != +24h.
@@ -24,7 +31,7 @@ async function fixture({saved=legacy,profiles=null,mobile=false}={}){
   Object.defineProperty(window,'speechSynthesis',{configurable:true,value:{cancel(){},getVoices(){return[];},speak(u){window.__utterances.push({text:u.text,lang:u.lang});u.onend?.();}}});
   window.SpeechRecognition=class{start(){window.__recognitionLanguages.push(this.lang);this.onstart?.();setTimeout(()=>{this.onresult?.({results:[[{transcript:window.__transcript}]]});this.onend?.();},10);}stop(){this.onend?.();}abort(){this.onend?.();}};
  },{saved,profiles});
- const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));await page.clock.install({time:fixed});await page.goto(base);await page.getByLabel('학습자 선택').waitFor();return{page,context};
+ const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));await page.clock.install({time:fixed});await page.goto(base);await enterLocalDemo(page);await page.getByLabel('학습자 선택').waitFor();return{page,context};
 }
 const state=page=>page.evaluate(()=>JSON.parse(localStorage.getItem('bloom-profiles-v2')));
 const choose=(page,id)=>page.getByLabel('학습자 선택').selectOption(id);
@@ -76,11 +83,11 @@ try{
   for(const [lang,scenarios]of [['en',englishScenarios],['ja',japaneseScenarios]]){assert.deepEqual(validateCurriculum(scenarios,lang),{valid:true,errors:[]});assert.deepEqual(scenarios.map(s=>s.id),lang==='en'?EN_MATERNAL_SCENARIO_IDS:SCENARIO_IDS);const ids=new Set();for(const scene of scenarios)for(const [i,s]of scene.sentences.entries()){assert.equal(s.id,makeSentenceId(lang,scene.id,i+1));assert.ok(!ids.has(s.id));ids.add(s.id);if(lang==='ja'){assert.ok(s.ruby?.length);assert.equal(s.ruby.map(p=>Array.isArray(p)?p[0]:p).join(''),s.text);assert.equal(s.ruby.map(p=>Array.isArray(p)?p[1]:p).join(''),s.kana);}}assert.equal(ids.size,lang==='en'?100:80);assert.equal(getNextSentence(scenarios,scenarios[0].sentences.at(-1).id).id,scenarios[1].sentences[0].id);}
  });
  await test('legacy migration and malformed storage retain healthy records and original legacy key',async()=>{
-  const {page,context}=await fixture();const s=await state(page);for(const[k,v]of Object.entries(legacy))assert.deepEqual(s.learners.wife[k],v,k);assert.deepEqual(await page.evaluate(()=>JSON.parse(localStorage.getItem('bloom-state'))),legacy);await page.reload();assert.deepEqual((await state(page)).learners,s.learners);await context.close();
+  const {page,context}=await fixture();const s=await state(page);for(const[k,v]of Object.entries(legacy))assert.deepEqual(s.learners.wife[k],v,k);assert.deepEqual(await page.evaluate(()=>JSON.parse(localStorage.getItem('bloom-state'))),legacy);await page.reload();await enterLocalDemo(page);assert.deepEqual((await state(page)).learners,s.learners);await context.close();
   const f=await fixture({saved:null,profiles:{version:2,active:'wife',learners:{wife:{learned:null,reviews:[],sessions:-1,minutes:'bad',custom:{keep:true}},husband:legacy}}});await f.page.getByRole('button',{name:'설정',exact:true}).click();await f.page.getByLabel('이름',{exact:true}).fill('Repaired');await f.page.getByRole('button',{name:'설정 완료'}).click();const repaired=(await state(f.page)).learners;assert.deepEqual(repaired.husband,{...legacy,sentenceProgress:{}});assert.deepEqual(repaired.wife.learned,[]);assert.equal(repaired.wife.sessions,0);assert.deepEqual(repaired.wife.custom,{keep:true});await f.context.close();
  });
  for(const[learner,lang,scenarios]of [['wife','en',englishScenarios],['husband','ja',japaneseScenarios]])await test(`${lang} full session reuses selected sentences across all phases and three quizzes; completion writes once`,async()=>{
-  const{page,context}=await fixture();const before=(await state(page)).learners;const scene=scenarios[7];await start(page,{learner,scenario:scene.id});assert.ok((await page.title()).includes(lang==='ja'?'일본어':'영어'));await complete(page,scene.sentences,{checkFlow:true,microphone:true});const stored=(await state(page)).learners;assert.equal(stored[learner].sessions,before[learner].sessions+1);assert.equal(Object.keys(stored[learner].sentenceProgress).length,scene.sentences.length);for(const s of scene.sentences){assert.equal(stored[learner].sentenceProgress[s.id].stage,1);assert.equal(stored[learner].sentenceProgress[s.id].lastOutcome,'passed');}for(const key of ['learned','reviews','reviewStages'])assert.deepEqual(stored[learner][key],before[learner][key]);assert.deepEqual(stored[learner==='wife'?'husband':'wife'],before[learner==='wife'?'husband':'wife']);const utterances=await page.evaluate(()=>window.__utterances);assert.deepEqual(utterances.map(u=>u.text),scene.sentences.map(s=>s.audioText));assert.ok(utterances.every(u=>u.lang===(lang==='ja'?'ja-JP':'en-US')));assert.deepEqual(await page.evaluate(()=>window.__recognitionLanguages),[lang==='ja'?'ja-JP':'en-US']);await click(page,dialog(page).getByRole('button',{name:'세션 닫기',exact:true}).last());assert.equal(await dialog(page).count(),0);await page.reload();assert.equal((await state(page)).learners[learner].sessions,before[learner].sessions+1);await context.close();
+  const{page,context}=await fixture();const before=(await state(page)).learners;const scene=scenarios[7];await start(page,{learner,scenario:scene.id});assert.ok((await page.title()).includes(lang==='ja'?'일본어':'영어'));await complete(page,scene.sentences,{checkFlow:true,microphone:true});const stored=(await state(page)).learners;assert.equal(stored[learner].sessions,before[learner].sessions+1);assert.equal(Object.keys(stored[learner].sentenceProgress).length,scene.sentences.length);for(const s of scene.sentences){assert.equal(stored[learner].sentenceProgress[s.id].stage,1);assert.equal(stored[learner].sentenceProgress[s.id].lastOutcome,'passed');}for(const key of ['learned','reviews','reviewStages'])assert.deepEqual(stored[learner][key],before[learner][key]);assert.deepEqual(stored[learner==='wife'?'husband':'wife'],before[learner==='wife'?'husband':'wife']);const utterances=await page.evaluate(()=>window.__utterances);assert.deepEqual(utterances.map(u=>u.text),scene.sentences.map(s=>s.audioText));assert.ok(utterances.every(u=>u.lang===(lang==='ja'?'ja-JP':'en-US')));assert.deepEqual(await page.evaluate(()=>window.__recognitionLanguages),[lang==='ja'?'ja-JP':'en-US']);await click(page,dialog(page).getByRole('button',{name:'세션 닫기',exact:true}).last());assert.equal(await dialog(page).count(),0);await page.reload();await enterLocalDemo(page);assert.equal((await state(page)).learners[learner].sessions,before[learner].sessions+1);await context.close();
  });
  await test('a failed attempt then correct retry schedules next LOCAL day; other sentences schedule three local days',async()=>{
   const{page,context}=await fixture({saved:null});await start(page);await complete(page,englishScenarios[0].sentences,{failFirst:true});const p=(await state(page)).learners.wife.sentenceProgress;const now=await page.evaluate(()=>Date.now());const expected=await page.evaluate(()=>{const d=new Date();return{next:new Date(d.getFullYear(),d.getMonth(),d.getDate()+1).getTime(),three:new Date(d.getFullYear(),d.getMonth(),d.getDate()+3,d.getHours(),d.getMinutes(),d.getSeconds(),d.getMilliseconds()).getTime()};});assert.equal(p[englishScenarios[0].sentences[0].id].dueAt,expected.next);assert.equal(p[englishScenarios[0].sentences[0].id].stage,0);assert.ok(p[englishScenarios[0].sentences[0].id].dueAt-now<3600000,'midnight is less than one hour away');for(const s of englishScenarios[0].sentences.slice(1))assert.ok(Math.abs(p[s.id].dueAt-expected.three)<100);await context.close();
@@ -88,7 +95,7 @@ try{
  await test('due sentence review filters selected scenario, advances 3/7/14/30/60 days and never revives legacy word IDs',async()=>{
   const{page,context}=await fixture({saved:null});await choose(page,'husband');
   for(const[stage,days]of [[0,3],[1,7],[2,14],[3,30],[4,60],[5,60]]){
-   await page.evaluate(({fixed,stage})=>{const s=JSON.parse(localStorage.getItem('bloom-profiles-v2'));s.learners.husband.sentenceProgress={'ja:cafe_order:1':{dueAt:fixed-1,stage},'ja:cafe_order:2':{dueAt:fixed+86400000,stage:2},'ja:directions:1':{dueAt:fixed-1,stage:1},'ja-cafe-order':{dueAt:fixed-1,stage:1}};localStorage.setItem('bloom-profiles-v2',JSON.stringify(s));},{fixed,stage});await page.reload();await start(page,{learner:'husband',review:true});assert.equal(await dialog(page).locator('.session-context li').count(),1);await complete(page,[japaneseScenarios[0].sentences[0]]);const p=(await state(page)).learners.husband.sentenceProgress;assert.equal(p['ja:cafe_order:1'].stage,Math.min(stage+1,5));const delta=await page.evaluate(({due,days})=>{const d=new Date();const target=new Date(d.getFullYear(),d.getMonth(),d.getDate()+days,d.getHours(),d.getMinutes(),d.getSeconds(),d.getMilliseconds());return Math.abs(due-target.getTime());},{due:p['ja:cafe_order:1'].dueAt,days});assert.ok(delta<100);assert.equal(p['ja:cafe_order:2'].dueAt,fixed+86400000);assert.equal(p['ja:directions:1'].dueAt,fixed-1);await click(page,dialog(page).getByRole('button',{name:'세션 닫기',exact:true}).last());}
+   await page.evaluate(({fixed,stage})=>{const s=JSON.parse(localStorage.getItem('bloom-profiles-v2'));s.learners.husband.sentenceProgress={'ja:cafe_order:1':{dueAt:fixed-1,stage},'ja:cafe_order:2':{dueAt:fixed+86400000,stage:2},'ja:directions:1':{dueAt:fixed-1,stage:1},'ja-cafe-order':{dueAt:fixed-1,stage:1}};localStorage.setItem('bloom-profiles-v2',JSON.stringify(s));},{fixed,stage});await page.reload();await enterLocalDemo(page);await start(page,{learner:'husband',review:true});assert.equal(await dialog(page).locator('.session-context li').count(),1);await complete(page,[japaneseScenarios[0].sentences[0]]);const p=(await state(page)).learners.husband.sentenceProgress;assert.equal(p['ja:cafe_order:1'].stage,Math.min(stage+1,5));const delta=await page.evaluate(({due,days})=>{const d=new Date();const target=new Date(d.getFullYear(),d.getMonth(),d.getDate()+days,d.getHours(),d.getMinutes(),d.getSeconds(),d.getMilliseconds());return Math.abs(due-target.getTime());},{due:p['ja:cafe_order:1'].dueAt,days});assert.ok(delta<100);assert.equal(p['ja:cafe_order:2'].dueAt,fixed+86400000);assert.equal(p['ja:directions:1'].dueAt,fixed-1);await click(page,dialog(page).getByRole('button',{name:'세션 닫기',exact:true}).last());}
   await context.close();
  });
  await test('scheduling retains early due dates and aggregates any failure across attempts',async()=>{
@@ -98,7 +105,7 @@ try{
   const{page,context}=await fixture({saved:null});await page.evaluate(()=>{delete window.SpeechRecognition;delete window.webkitSpeechRecognition;delete window.SpeechSynthesisUtterance;});await start(page,{learner:'husband'});await click(page,dialog(page).getByRole('button',{name:'뜻을 확인했어요 · 듣기 시작'}));assert.ok(await dialog(page).getByText(/음성 재생을 지원하지 않아요/).isVisible());for(let i=0;i<4;i++)await click(page,dialog(page).getByRole('button',{name:'다음으로 →'}));await click(page,dialog(page).getByRole('button',{name:'마이크로 말하기'}));assert.ok(await dialog(page).getByText(/음성 인식을 지원하지 않아요/).isVisible());await answer(page,japaneseScenarios[0].sentences[0],{wrong:true});assert.ok(await dialog(page).locator('ruby rt').count()>0);await context.close();
  });
  await test('two tabs isolate selected learners, preserve settings/progress and legacy data across reload',async()=>{
-  const{page:en,context}=await fixture();const ja=await context.newPage();ja.on('pageerror',e=>errors.push(e.message));await ja.clock.install({time:fixed});await ja.goto(base);await choose(ja,'husband');assert.equal(await en.getByLabel('학습자 선택').inputValue(),'wife');await start(en);await complete(en,englishScenarios[0].sentences);await click(en,dialog(en).getByRole('button',{name:'세션 닫기',exact:true}).last());await ja.getByRole('button',{name:'설정',exact:true}).click();await ja.getByLabel('이름',{exact:true}).fill('Japanese tab');await ja.getByRole('button',{name:'설정 완료'}).click();await start(ja,{learner:'husband'});await complete(ja,japaneseScenarios[0].sentences);const expected=(await state(en)).learners;assert.equal(expected.wife.sessions,8);assert.equal(expected.husband.sessions,1);assert.equal(expected.husband.name,'Japanese tab');assert.deepEqual(expected.wife.learned,legacy.learned);assert.deepEqual(expected.wife.reviews,legacy.reviews);for(const p of [en,ja]){await p.reload();await p.getByLabel('학습자 선택').waitFor();assert.deepEqual((await state(p)).learners,expected);assert.deepEqual(await p.evaluate(()=>JSON.parse(localStorage.getItem('bloom-state'))),legacy);}await context.close();
+  const{page:en,context}=await fixture();const ja=await context.newPage();ja.on('pageerror',e=>errors.push(e.message));await ja.clock.install({time:fixed});await ja.goto(base);await enterLocalDemo(ja);await choose(ja,'husband');assert.equal(await en.getByLabel('학습자 선택').inputValue(),'wife');await start(en);await complete(en,englishScenarios[0].sentences);await click(en,dialog(en).getByRole('button',{name:'세션 닫기',exact:true}).last());await ja.getByRole('button',{name:'설정',exact:true}).click();await ja.getByLabel('이름',{exact:true}).fill('Japanese tab');await ja.getByRole('button',{name:'설정 완료'}).click();await start(ja,{learner:'husband'});await complete(ja,japaneseScenarios[0].sentences);const expected=(await state(en)).learners;assert.equal(expected.wife.sessions,8);assert.equal(expected.husband.sessions,1);assert.equal(expected.husband.name,'Japanese tab');assert.deepEqual(expected.wife.learned,legacy.learned);assert.deepEqual(expected.wife.reviews,legacy.reviews);for(const p of [en,ja]){await p.reload();await enterLocalDemo(p);await p.getByLabel('학습자 선택').waitFor();assert.deepEqual((await state(p)).learners,expected);assert.deepEqual(await p.evaluate(()=>JSON.parse(localStorage.getItem('bloom-state'))),legacy);}await context.close();
  });
  await test('mobile full-screen modal traps focus, restores prior page/opener and avoids horizontal overflow',async()=>{
   const{page,context}=await fixture({saved:null,mobile:true});await page.getByRole('button',{name:'나의 학습',exact:true}).click();const opener=page.getByRole('button',{name:englishScenarios[0].titleKo+' 문장 세션 시작',exact:true});await opener.click();const d=dialog(page);assert.ok(await d.getByRole('heading',{name:'장면 이해'}).evaluate(el=>el===document.activeElement));const rect=await d.boundingBox();assert.ok(rect.width<=390&&rect.height>=800);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));for(let i=0;i<12;i++){await page.keyboard.press('Tab');assert.ok(await d.evaluate(el=>el.contains(document.activeElement)));}await complete(page,englishScenarios[0].sentences);await click(page,d.getByRole('button',{name:'세션 닫기',exact:true}).last());assert.equal(await d.count(),0);assert.ok(await opener.evaluate(el=>el===document.activeElement));assert.ok(await page.getByRole('heading',{name:'아이와 함께하는 20가지 상황'}).isVisible());assert.equal(await page.evaluate(()=>document.body.style.overflow),'');await context.close();
@@ -133,6 +140,35 @@ try{
      await topVisible(last?'세션 완료':i===count-1?'오늘의 퀴즈':phase);
     }
    }
+  }finally{await context.close();}
+ });
+ await test('mobile 390px fullscreen summary exposes failed local save and retries exactly once',async()=>{
+  const{page,context}=await fixture({saved:null,mobile:true});
+  try{
+   await start(page);
+   const before=(await state(page)).learners.wife.sessions;
+   await page.evaluate(()=>{
+    window.__originalSetItem=Storage.prototype.setItem;
+    Storage.prototype.setItem=function(key,value){if(key==='bloom-profiles-v2')throw new DOMException('Simulated quota failure','QuotaExceededError');return window.__originalSetItem.call(this,key,value);};
+   });
+   await complete(page,englishScenarios[0].sentences);
+   const d=dialog(page),status=d.locator('.session-save-status');
+   assert.match(await status.innerText(),/브라우저 저장 실패/);
+   const retry=status.getByRole('button',{name:'다시 저장',exact:true});
+   assert.equal((await state(page)).learners.wife.sessions,before,'failed write leaves durable sessions unchanged');
+   await retry.scrollIntoViewIfNeeded();
+   const rect=await retry.boundingBox();
+   assert.ok(rect&&rect.x>=0&&rect.x+rect.width<=390&&rect.y>=0&&rect.y+rect.height<=844,'retry is reachable inside mobile fullscreen dialog');
+   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+   await page.evaluate(()=>{Storage.prototype.setItem=window.__originalSetItem;});
+   await retry.click();
+   assert.equal(await status.innerText(),'이 브라우저에 저장됨');
+   assert.equal(await status.getByRole('button',{name:'다시 저장'}).count(),0);
+   assert.equal((await state(page)).learners.wife.sessions,before+1);
+   assert.equal(Object.keys((await state(page)).learners.wife.sentenceProgress).length,5);
+   await click(page,d.getByRole('button',{name:'세션 닫기',exact:true}).last());
+   await page.reload();await enterLocalDemo(page);
+   assert.equal((await state(page)).learners.wife.sessions,before+1,'retry survives reload without duplicate completion');
   }finally{await context.close();}
  });
  await test('linked SVG favicon is served successfully as an SVG image',async()=>{
