@@ -199,8 +199,8 @@ export default {
         return response({code:'INTERNAL_ERROR',error:'The account service could not complete this request. Please try again.'},500);
       }
     }
-    if(env.ASSETS)return env.ASSETS.fetch(request);
     // Build-time replacement embeds the Vite output for Sites' single Worker format.
+    // Sites may also inject ASSETS; serve this build's embedded files before that fallback.
     if(typeof __BLOOM_ASSETS__!=='undefined'){
       let path;try{path=decodeURIComponent(url.pathname);}catch{return new Response('Bad path',{status:400});}
       const assets=__BLOOM_ASSETS__;
@@ -211,6 +211,7 @@ export default {
         return new Response(request.method==='HEAD'?null:bytes,{headers:{'Content-Type':asset.type,'Cache-Control':path.startsWith('/assets/')?'public, max-age=31536000, immutable':'no-cache','X-Content-Type-Options':'nosniff','Referrer-Policy':'same-origin'}});
       }
     }
+    if(env.ASSETS)return env.ASSETS.fetch(request);
     return new Response('Not found',{status:404});
   },
 };
