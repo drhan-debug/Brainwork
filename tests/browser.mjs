@@ -108,6 +108,45 @@ try{
   const progress={[third]:{dueAt:fixed-100},[second]:{dueAt:fixed-100},[first]:{dueAt:fixed-300},[fourth]:{dueAt:fixed+1},obsolete:{dueAt:0},invalid:{dueAt:NaN}};
   assert.deepEqual(getDueSentenceIds(progress,fixed,[first,second,third,fourth,'invalid']),[first,third,second]);
  });
+ await test('review priority orders due scenes by failed count, due date, and curriculum and launches each due subset at 390px',async()=>{
+  const scenes=englishScenarios.slice(0,5),profile={name:'우선 복습 학습자',goal:10};
+  const dueSpecs=[
+   [[-1000,'failed'],[-2000,'failed'],[-3000,'passed']],
+   [[-8000,'failed'],[-9000,'passed']],
+   [[-12000,'failed'],[-11000,'passed']],
+   [[-12000,'failed'],[-10000,'passed']],
+   [[-20000,'passed']],
+  ];
+  const progress={};
+  for(const[sceneIndex,specs]of dueSpecs.entries())for(const[sentenceIndex,[offset,lastOutcome]]of specs.entries())progress[scenes[sceneIndex].sentences[sentenceIndex].id]={stage:1,dueAt:fixed+offset,lastOutcome};
+  progress[scenes[4].sentences[1].id]={stage:1,dueAt:fixed+86400000,lastOutcome:'failed'};
+  const learner={...blankLearner(profile),sentenceProgress:progress};
+  const{page,context}=await fixture({saved:null,mobile:true,profiles:{version:2,active:'wife',learners:{wife:learner,husband:blankLearner(profile)}}});
+  try{
+   await page.getByRole('button',{name:'복습 노트',exact:true}).click();
+   const section=page.getByRole('region',{name:'문장 복습',exact:true}),rows=section.locator('.sentence-review-row');
+   const ordered=[scenes[0],scenes[2],scenes[3],scenes[1],scenes[4]];
+   assert.deepEqual(await rows.locator('h3').allTextContents(),ordered.map(scene=>scene.titleKo),'failed count wins, then earliest due date, then curriculum order');
+   assert.equal(await rows.count(),5,'future-only failures do not create a review row');
+   assert.match(await section.locator('.section-heading h2').innerText(),/10개/,'total counts only currently due sentences');
+   assert.deepEqual(await rows.locator('p').allTextContents(),[
+    '3문장 · 다시 연습할 문장 2개 · 이 상황의 복습 문장만 연습해요.',
+    '2문장 · 다시 연습할 문장 1개 · 이 상황의 복습 문장만 연습해요.',
+    '2문장 · 다시 연습할 문장 1개 · 이 상황의 복습 문장만 연습해요.',
+    '2문장 · 다시 연습할 문장 1개 · 이 상황의 복습 문장만 연습해요.',
+    '1문장 · 이 상황의 복습 문장만 연습해요.',
+   ],'row counts include only currently due retries');
+   assert.equal(await rows.first().locator('.sentence-review-recommended').innerText(),'먼저 복습 추천');
+   assert.equal(await rows.locator('.sentence-review-recommended').count(),1,'only the first row carries the recommendation cue');
+   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'priority list fits 390px');
+   for(const scene of ordered){
+    await rows.filter({has:page.getByRole('heading',{name:scene.titleKo,exact:true})}).getByRole('button',{name:scene.titleKo+' 문장 복습 시작',exact:true}).click();
+    const due=scene.sentences.filter(sentence=>progress[sentence.id]?.dueAt<=fixed);
+    assert.deepEqual(await dialog(page).locator('.session-context li p').allTextContents(),due.map(sentence=>sentence.meaningKo),`${scene.id} launches exactly its due subset`);
+    await click(page,dialog(page).getByRole('button',{name:'세션 취소하고 닫기',exact:true}));
+   }
+  }finally{await context.close();}
+ });
  await test('review mobile cues use accessible collapsed details with Korean meanings and no target answers',async()=>{
   const scene=englishScenarios[0],sentences=scene.sentences.slice(0,3),profile={name:'복습 학습자',goal:10};
   const learner={...blankLearner(profile),sentenceProgress:Object.fromEntries(sentences.map((s,i)=>[s.id,{stage:1,dueAt:fixed-(i+1)*1000}]))};
