@@ -293,6 +293,96 @@ try{
    assert.equal(requests.length,2);
   }finally{await context.close();}
  });
+ for(const [learner,lang,scenes] of [['wife','en',englishScenarios],['husband','ja',japaneseScenarios]])await test(`daily ${lang} recommends first incomplete scene, preserves manual choice, then advances after one full session at 390px`,async()=>{
+  const profile={name:'계속 학습자',goal:10};
+  const progress=Object.fromEntries([...scenes[0].sentences,...scenes[1].sentences.slice(0,1)].map(sentence=>[sentence.id,{stage:1,dueAt:fixed+86400000}]));
+  const learners={wife:blankLearner(profile),husband:blankLearner(profile)};
+  learners[learner]={...learners[learner],sentenceProgress:progress};
+  const{page,context}=await fixture({saved:null,mobile:true,profiles:{version:2,active:learner,learners}});
+  try{
+   await choose(page,learner);
+   const selection=page.getByLabel('오늘의 문장 상황');
+   assert.equal(await selection.inputValue(),scenes[1].id,'a partial imported scene is the next daily scene');
+   await selection.selectOption(scenes[3].id);
+   await page.getByRole('button',{name:'나의 학습',exact:true}).click();
+   await page.getByRole('button',{name:'홈',exact:true}).click();
+   assert.equal(await selection.inputValue(),scenes[3].id,'navigation keeps the learner’s manual choice');
+   await page.getByRole('button',{name:'문장 세션 시작하기',exact:true}).click();
+   assert.equal(await dialog(page).locator('.session-context li').count(),scenes[3].sentences.length);
+   await complete(page,scenes[3].sentences);
+   const sessions=(await state(page)).learners[learner].sessions;
+   assert.equal(sessions,1);
+   await click(page,dialog(page).getByRole('button',{name:'세션 닫기',exact:true}).last());
+   assert.equal(await selection.inputValue(),scenes[1].id,'completion advances to first still incomplete scene');
+   await page.reload();await enterLocalDemo(page);await choose(page,learner);
+   assert.equal(await selection.inputValue(),scenes[1].id,'recommendation survives reload');
+   assert.equal((await state(page)).learners[learner].sessions,sessions,'completion is recorded once');
+   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'home fits 390px');
+  }finally{await context.close();}
+ });
+ await test('daily recommendations stay separate for demo learners and fully recorded curricula stay usable',async()=>{
+  const profile={name:'학습자',goal:10};
+  const recorded=scenes=>Object.fromEntries(scenes.flatMap(scene=>scene.sentences.map(sentence=>[sentence.id,{stage:1,dueAt:fixed+86400000}])));
+  const wife={...blankLearner(profile),sentenceProgress:recorded(englishScenarios)};
+  const husband={...blankLearner(profile),sentenceProgress:recorded(japaneseScenarios.slice(0,2))};
+  const{page,context}=await fixture({saved:null,profiles:{version:2,active:'wife',learners:{wife,husband}}});
+  try{
+   const selection=page.getByLabel('오늘의 문장 상황');
+   assert.equal(await selection.inputValue(),englishScenarios[0].id,'all complete retains a valid selectable scene');
+   assert.match(await page.locator('.hero').innerText(),/모두 학습했어요/,'home acknowledges completed curriculum');
+   await selection.selectOption(englishScenarios[6].id);
+   await page.getByRole('button',{name:'문장 세션 시작하기',exact:true}).click();
+   assert.equal(await dialog(page).locator('.session-context li').count(),englishScenarios[6].sentences.length,'completed learner can practice again');
+   await click(page,dialog(page).locator('.session-close'));
+   await choose(page,'husband');
+   assert.equal(await selection.inputValue(),japaneseScenarios[2].id,'other learner recommends their own first incomplete scene');
+   await choose(page,'wife');
+   assert.equal(await selection.inputValue(),englishScenarios[0].id,'switching learner recomputes the completed state');
+  }finally{await context.close();}
+ });
+ await test('daily account recommendation uses account progress and due home action opens review note at 390px',async()=>{
+  const profile={name:'계정 학습자',language:'ja',goal:10,timezone:'Asia/Seoul'};
+  const recorded=Object.fromEntries([...japaneseScenarios[0].sentences,...japaneseScenarios[1].sentences.slice(0,1)].map((sentence,i)=>[sentence.id,{stage:1,dueAt:i===0?fixed-1000:fixed+86400000}]));
+  const learner={...blankLearner(profile),sentenceProgress:recorded};
+  const remote={authenticated:true,account:{id:'daily-account',email:'daily@example.test'},profile,learner,revision:0,imports:[]};
+  const requests=[];
+  const apiRoute=async route=>{const request=route.request();requests.push(request.method()+' '+new URL(request.url()).pathname);return route.fulfill({json:remote});};
+  const localProfile={name:'다른 로컬 학습자',goal:10};
+  const localJa={...blankLearner(localProfile),sentenceProgress:Object.fromEntries(japaneseScenarios.flatMap(scene=>scene.sentences.map(sentence=>[sentence.id,{stage:1,dueAt:fixed+86400000}])))};
+  const{page,context}=await fixture({saved:null,mobile:true,apiRoute,profiles:{version:2,active:'husband',learners:{wife:blankLearner(localProfile),husband:localJa}}});
+  try{
+   assert.equal(await page.getByLabel('오늘의 문장 상황').inputValue(),japaneseScenarios[1].id);
+   assert.ok((await page.locator('.hero').innerText()).includes('1'),'home shows a due review count');
+   const dueAction=page.locator('.hero').getByRole('button',{name:/복습/});
+   await dueAction.click();
+   assert.ok(await page.getByRole('region',{name:'문장 복습',exact:true}).isVisible(),'due action opens the review note');
+   assert.equal(await dialog(page).count(),0);
+   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+   assert.deepEqual(requests,['GET /api/session']);
+  }finally{await context.close();}
+ });
+ await test('daily account failed save discard restores selected scene from uncommitted completion',async()=>{
+  const profile={name:'계정 학습자',language:'en',goal:10,timezone:'America/New_York'};
+  const recorded=Object.fromEntries(englishScenarios[0].sentences.map(sentence=>[sentence.id,{stage:1,dueAt:fixed+86400000}]));
+  const learner={...blankLearner(profile),sentenceProgress:recorded};
+  const remote={authenticated:true,account:{id:'daily-failed-account',email:'daily-failed@example.test'},profile,learner,revision:0,imports:[]};
+  const requests=[];
+  const apiRoute=async route=>{const request=route.request(),path=new URL(request.url()).pathname;requests.push(request.method()+' '+path);if(path==='/api/session')return route.fulfill({json:remote});return route.fulfill({status:503,json:{code:'STORAGE_UNAVAILABLE'}});};
+  const{page,context}=await fixture({saved:null,apiRoute});
+  try{
+   const selection=page.getByLabel('오늘의 문장 상황');
+   assert.equal(await selection.inputValue(),englishScenarios[1].id);
+   await selection.selectOption(englishScenarios[1].id);
+   await page.getByRole('button',{name:'문장 세션 시작하기',exact:true}).click();
+   await complete(page,englishScenarios[1].sentences);
+   await dialog(page).locator('.session-save-status').filter({hasText:'서버 저장 실패'}).waitFor();
+   await click(page,dialog(page).getByRole('button',{name:'세션 닫기',exact:true}).last());
+   assert.equal(await selection.inputValue(),englishScenarios[1].id,'failed save preserves the selected scene');
+   await page.getByRole('button',{name:'저장 안 된 변경 취소',exact:true}).click();
+   assert.equal(await selection.inputValue(),englishScenarios[1].id,'discard restores the unfinished selected scene');
+   assert.deepEqual(requests,['GET /api/session','POST /api/progress']);
+  }finally{await context.close();}
+ });
  await test('linked SVG favicon is served successfully as an SVG image',async()=>{
   const{page,context}=await fixture({saved:null});
   try{
