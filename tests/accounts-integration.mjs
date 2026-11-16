@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { randomBytes } from 'node:crypto';
 import { build } from 'esbuild';
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 import { applyProgress, blankLearner } from '../server/domain.js';
@@ -12,6 +13,7 @@ import { sentenceIdsForLanguage } from '../src/learning/schema.js';
 const root = new URL('..', import.meta.url).pathname;
 const temporary = await mkdtemp(join(tmpdir(), 'brainwork-accounts-test-'));
 let worker;
+let workerWithoutAdminSecret;
 let failures = 0;
 let passes = 0;
 async function test(name, fn) {
@@ -19,6 +21,7 @@ async function test(name, fn) {
   catch (error) { failures++; console.error(`FAIL ${name}\n${error.stack}`); }
 }
 const origin = 'https://brainwork.test';
+const adminSecret = randomBytes(32).toString('hex');
 function client() {
   let cookie = '';
   let expectedAccountId;
@@ -43,10 +46,13 @@ function client() {
 
 try {
   await build({ entryPoints: [join(root, 'server/index.js')], outfile: join(temporary, 'worker.mjs'), bundle: true, format: 'esm', platform: 'browser', target: 'es2022' });
-  worker = new Miniflare(convertV4MiniflareOptions({ modules: true, modulesRoot: temporary, scriptPath: join(temporary, 'worker.mjs'), compatibilityDate: '2026-11-01', d1Databases: ['DB'] }));
+  const workerOptions = { modules: true, modulesRoot: temporary, scriptPath: join(temporary, 'worker.mjs'), compatibilityDate: '2026-11-01', d1Databases: ['DB'] };
+  worker = new Miniflare(convertV4MiniflareOptions({ ...workerOptions, bindings: { BLOOM_ADMIN_RESET_SECRET: adminSecret } }));
   const db = await worker.getD1Database('DB');
   const schema = await readFile(join(root, 'migrations/0001_accounts.sql'), 'utf8');
   for (const statement of schema.split(';').map(s => s.trim()).filter(Boolean)) await db.prepare(statement).run();
+  const adminMigration = await readFile(join(root, 'migrations/0002_admin_audit_events.sql'), 'utf8');
+  for (const statement of adminMigration.split('--> statement-breakpoint').map(s => s.trim()).filter(Boolean)) await db.prepare(statement).run();
 
   const a = client(), b = client(), anonymous = client();
   const password = 'correct horse battery staple';
@@ -256,6 +262,67 @@ try {
     assert.deepEqual(await session(a), { authenticated: false });
     assert.deepEqual(await session(b), otherState);
   });
+  await test('administrator reset is gated, preserves learning, revokes sessions, and records a clean audit event', async () => {
+    const owner = client(), secondDevice = client(), admin = client(), login = client();
+    const email = 'admin-reset-integration@example.test';
+    const oldPassword = 'original password 123';
+    const newPassword = 'replacement password 456';
+    const registered = expectStatus(await owner.request('/api/auth/register', { method: 'POST', body: { ...account(email), password: oldPassword } }), 201);
+    const oldRecoveryCode = registered.recoveryCode;
+    const oldCookie = owner.cookie;
+    expectStatus(await secondDevice.request('/api/auth/login', { method: 'POST', body: { email, password: oldPassword } }), 200);
+    const progressed = expectStatus(await owner.request('/api/progress', { method: 'POST', body: op('admin-reset-learning', registered.revision) }), 200);
+    const before = await db.prepare('SELECT * FROM accounts WHERE id=?').bind(registered.account.id).first();
+    const resetBody = { email, newPassword };
+    const postReset = (authorization, extra = {}) => admin.request('/api/admin/password-reset', { method: 'POST', body: resetBody, headers: { Authorization: authorization, 'CF-Connecting-IP': '198.51.100.91', ...extra } });
+    for (const header of ['', 'Bearer incorrect', `Bearer ${randomBytes(32).toString('hex')}`]) {
+      const denied = expectStatus(await postReset(header), 401);
+      assert.equal(denied.code, 'AUTH_REQUIRED');
+      assert.equal(denied.recoveryCode, undefined);
+    }
+    expectStatus(await postReset(`Bearer ${adminSecret}`, { Origin: 'https://foreign.test' }), 403);
+    assert.deepEqual(await db.prepare('SELECT * FROM accounts WHERE id=?').bind(registered.account.id).first(), before);
+    assert.equal((await db.prepare('SELECT count(*) AS count FROM admin_audit_events').first()).count, 0);
+
+    workerWithoutAdminSecret = new Miniflare(convertV4MiniflareOptions(workerOptions));
+    const missingResponse = await workerWithoutAdminSecret.dispatchFetch(`${origin}/api/admin/password-reset`, { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json', Authorization: `Bearer ${adminSecret}` }, body: JSON.stringify(resetBody) });
+    assert.equal(missingResponse.status, 401);
+    assert.equal((await missingResponse.json()).code, 'AUTH_REQUIRED');
+    assert.deepEqual(await db.prepare('SELECT * FROM accounts WHERE id=?').bind(registered.account.id).first(), before);
+
+    const resetResponse = await postReset(`Bearer ${adminSecret}`);
+    const reset = expectStatus(resetResponse, 200);
+    assert.match(reset.recoveryCode, /^[a-f0-9]{64}$/);
+    assert.notEqual(reset.recoveryCode, oldRecoveryCode);
+    assert.deepEqual(Object.keys(reset), ['recoveryCode']);
+    assert.equal(resetResponse.headers.get('set-cookie'), null);
+    assert.equal(resetResponse.headers.get('cache-control'), 'no-store');
+    assert.equal(resetResponse.headers.get('referrer-policy'), 'no-referrer');
+    assert.ok(!JSON.stringify(reset).includes(adminSecret));
+    assert.deepEqual(await session(owner), { authenticated: false });
+    assert.deepEqual(await session(secondDevice), { authenticated: false });
+    assert.deepEqual(expectStatus(await admin.request('/api/session', { cookie: oldCookie }), 200), { authenticated: false });
+    const after = await db.prepare('SELECT * FROM accounts WHERE id=?').bind(registered.account.id).first();
+    for (const field of ['id', 'email', 'profile_json', 'learner_json', 'imports_json', 'revision', 'created_at']) assert.deepEqual(after[field], before[field], field);
+    assert.notEqual(after.password_hash, before.password_hash);
+    assert.notEqual(after.recovery_hash, before.recovery_hash);
+    assert.equal((await db.prepare('SELECT count(*) AS count FROM sessions WHERE account_id=?').bind(after.id).first()).count, 0);
+    const audit = await db.prepare('SELECT * FROM admin_audit_events WHERE account_id=?').bind(after.id).all();
+    assert.equal(audit.results.length, 1);
+    assert.equal(audit.results[0].event_type, 'password_reset');
+    assert.ok(Number.isInteger(audit.results[0].created_at));
+    const auditText = JSON.stringify(audit.results);
+    for (const forbidden of [email, adminSecret, oldPassword, newPassword, oldRecoveryCode, reset.recoveryCode]) assert.ok(!auditText.includes(forbidden));
+    assert.deepEqual(progressed.learner, JSON.parse(after.learner_json));
+    expectStatus(await login.request('/api/auth/login', { method: 'POST', body: { email, password: oldPassword }, headers: { 'CF-Connecting-IP': '198.51.100.92' } }), 401);
+    const logged = expectStatus(await login.request('/api/auth/login', { method: 'POST', body: { email, password: newPassword }, headers: { 'CF-Connecting-IP': '198.51.100.92' } }), 200);
+    assert.equal(logged.account.id, before.id);
+    assert.deepEqual(logged.learner, progressed.learner);
+    expectStatus(await client().request('/api/auth/recover', { method: 'POST', body: { email, recoveryCode: oldRecoveryCode, newPassword: 'should not work' }, headers: { 'CF-Connecting-IP': '198.51.100.93' } }), 401);
+    const recovered = expectStatus(await client().request('/api/auth/recover', { method: 'POST', body: { email, recoveryCode: reset.recoveryCode, newPassword: 'recovered password 789' }, headers: { 'CF-Connecting-IP': '198.51.100.93' } }), 200);
+    assert.equal(recovered.account.id, before.id);
+    assert.deepEqual(recovered.learner, progressed.learner);
+  });
   await test('authentication attempts are rate limited without leaking account state', async () => {
     let limited = false;
     for (let i = 0; i < 25; i++) {
@@ -266,6 +333,7 @@ try {
     assert.ok(limited, 'auth limit should trigger within 25 attempts');
   });
 } finally {
+  await workerWithoutAdminSecret?.dispose();
   await worker?.dispose();
   await rm(temporary, { recursive: true, force: true });
 }

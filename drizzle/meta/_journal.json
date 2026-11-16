@@ -8,6 +8,13 @@
       "when": 1794603698713,
       "tag": "0000_outgoing_maginty",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1794788641982,
+      "tag": "0001_fast_wolfpack",
+      "breakpoints": true
     }
   ]
 }

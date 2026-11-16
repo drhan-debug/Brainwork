@@ -5,6 +5,7 @@ import './style.css';
 import SentenceSession from './SessionPlayer';
 import {createSpeechController, inAppBrowserGuide, copyPageUrl} from './speech';
 import {AccountGateway, accountApi, RecoveryNotice} from './Accounts';
+import AdminReset from './AdminReset';
 import {englishScenarios, englishReviewScenarios} from './content/scenarios.en';
 import {japaneseScenarios} from './content/scenarios.ja';
 import {assertValidCurriculum, getScenario} from './learning/schema';
@@ -311,4 +312,4 @@ function App({account,onLogout,onAccountChanged,demo=false}){
 function Practice({title,text,icon:Icon,onClick}){return <button className="practice-card" onClick={onClick}><Icon size={23}/><h3>{title}</h3><p>{text}</p><span>연습 시작하기 <ArrowRight size={15}/></span></button>}
 function Stat({icon:Icon,color,label,value,unit,bottom,progress}){return <div className="stat"><div className="stat-top"><span className={'stat-icon '+color}><Icon size={17}/></span><span>{label}</span></div><div className="stat-value">{value}<span>{unit}</span></div>{progress!==undefined&&<div className="stat-track"><span style={{width:progress+'%'}}/></div>}<p>{bottom}</p></div>}
 function WeeklyGrowth({data,timezone}){const days=recentCalendarDays(timezone).map(day=>({...day,minutes:data.dailyMinutes[day.key]||0}));const total=Math.round(days.reduce((sum,day)=>sum+day.minutes,0)*10)/10,max=Math.max(data.goal,...days.map(day=>day.minutes));return <section className="weekly-growth"><h2>최근 7일의 작은 발걸음</h2><p>실제 완료한 학습 {total}분 · {days.filter(day=>day.minutes>0).length}일 학습 · 현재 {streak(data.dates,timezone)}일 연속</p><div className="week-bars">{days.map(day=><div className="week-day" key={day.key}><span>{day.minutes}분</span><div className="week-bar" style={{height:Math.max(3,day.minutes/max*100)+'px'}}/><span>{day.label}</span></div>)}</div></section>}
-createRoot(document.getElementById('root')).render(<AccountGateway>{props=><App key={props.account?.account.id||'demo'} {...props}/>}</AccountGateway>);
+createRoot(document.getElementById('root')).render(window.location.pathname==='/admin/reset'?<AdminReset/>:<AccountGateway>{props=><App key={props.account?.account.id||'demo'} {...props}/>}</AccountGateway>);

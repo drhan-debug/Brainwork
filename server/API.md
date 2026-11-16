@@ -25,6 +25,14 @@ All responses are JSON, `Cache-Control: no-store`. Send JSON and a same-origin `
 - `POST /api/auth/logout`: `{expectedAccountId}`.
 - `POST /api/auth/recover`: `{email,recoveryCode,newPassword}`. Invalidates every prior session and rotates recovery code; establishes a new session.
 
+## Administrator password reset
+
+`POST /api/admin/password-reset` requires a same-origin JSON request with `Authorization: Bearer <admin secret>` and `{email,newPassword}`. The runtime `BLOOM_ADMIN_RESET_SECRET` must be a 64-character hexadecimal value. If it is unset or malformed, the endpoint fails closed with a generic 401. The bearer secret is checked before request body parsing or account lookup. The new password must contain 4–128 characters and at most 512 UTF-8 bytes. Successful response: `{recoveryCode}` with `Cache-Control: no-store` and `Referrer-Policy: no-referrer`; it does not set an auth cookie. Record the new recovery code immediately because it is returned once.
+
+A successful reset changes only the password hash and recovery hash for the existing account, revokes every session, and writes an `admin_audit_events` row containing the account ID, event type, and timestamp. It preserves account ID, profile, learner history, imports, operations, and revision. The audit row contains no email address, password, secret, or recovery code. Reset requests use the existing 15-minute IP and email auth limits.
+
+The site owner should generate a fresh random 32-byte hex value locally and set it as the deployment's secret binding named `BLOOM_ADMIN_RESET_SECRET` (for example with the hosting provider's secret manager). Keep the value out of source files, `.env` files, logs, and chat messages. Submit it only to the deployed same-origin administrator flow over HTTPS. Rotate or remove the binding after use if the reset capability is temporary. Apply migration `0002_admin_audit_events.sql` before using the endpoint.
+
 ## Account mutations
 
 `PATCH /api/profile`: `{expectedAccountId,revision,profile:{name,language,goal,timezone}}`. Full profile required. Language locked after any activity or import.

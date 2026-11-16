@@ -79,6 +79,33 @@ async function rateLimit(request,db,email) {
   await db.prepare('DELETE FROM auth_limits WHERE key IN (SELECT key FROM auth_limits WHERE window_start<? LIMIT 100)').bind(now-86400000).run();
   await db.prepare('DELETE FROM sessions WHERE token_hash IN (SELECT token_hash FROM sessions WHERE expires_at<? LIMIT 100)').bind(now).run();
 }
+function adminAuthorized(request,secret) {
+  if(typeof secret!=='string'||!/^[a-f0-9]{64}$/i.test(secret))return false;
+  const supplied=/^Bearer ([a-f0-9]{64})$/i.exec(request.headers.get('authorization')||'')?.[1]||'';
+  // Compare a fixed number of bytes even for absent or malformed credentials.
+  const expected=secret.toLowerCase(), actual=supplied.toLowerCase().padEnd(64,'0');
+  let diff=supplied.length===64?0:1;
+  for(let i=0;i<64;i++)diff|=expected.charCodeAt(i)^actual.charCodeAt(i);
+  return diff===0;
+}
+async function adminPasswordReset(request,db,body,secret) {
+  if(!adminAuthorized(request,secret))fail('AUTH_REQUIRED','Administrator authorization is required.',401);
+  const email=emailInput(body.email);
+  passwordInput(body.newPassword);
+  await rateLimit(request,db,`admin-reset:${email}`);
+  const row=await db.prepare('SELECT id,recovery_hash FROM accounts WHERE email=?').bind(email).first();
+  if(!row)fail('ACCOUNT_NOT_FOUND','Account not found.',404);
+  const recoveryCode=random();
+  const recoveryHash=await digest(recoveryCode);
+  const password=await passwordHash(body.newPassword);
+  const results=await db.batch([
+    db.prepare('UPDATE accounts SET password_hash=?,recovery_hash=? WHERE id=? AND recovery_hash=?').bind(password,recoveryHash,row.id,row.recovery_hash),
+    db.prepare('DELETE FROM sessions WHERE account_id=? AND EXISTS(SELECT 1 FROM accounts WHERE id=? AND recovery_hash=?)').bind(row.id,row.id,recoveryHash),
+    db.prepare('INSERT INTO admin_audit_events(id,account_id,event_type,created_at) SELECT ?,id,?,? FROM accounts WHERE id=? AND recovery_hash=?').bind(crypto.randomUUID(),'password_reset',Date.now(),row.id,recoveryHash),
+  ]);
+  if(results[0].meta.changes!==1)fail('RESET_CONFLICT','Account changed. Retry the reset.',409);
+  return response({recoveryCode},200,{'Referrer-Policy':'no-referrer'});
+}
 async function sessionStatement(db,accountId,token,at=Date.now()) {
   return db.prepare('INSERT INTO sessions(token_hash,account_id,expires_at) VALUES(?,?,?)').bind(await digest(token),accountId,at+SESSION_MS);
 }
@@ -169,7 +196,7 @@ async function updateAccount(db,row,body,path,sessionHash) {
 }
 export async function api(request,env) {
   const url=new URL(request.url),path=url.pathname;
-  const methods={'/api/session':'GET','/api/auth/register':'POST','/api/auth/login':'POST','/api/auth/logout':'POST','/api/auth/recover':'POST','/api/profile':'PATCH','/api/progress':'POST','/api/import':'POST'};
+  const methods={'/api/session':'GET','/api/auth/register':'POST','/api/auth/login':'POST','/api/auth/logout':'POST','/api/auth/recover':'POST','/api/admin/password-reset':'POST','/api/profile':'PATCH','/api/progress':'POST','/api/import':'POST'};
   if(!methods[path])fail('NOT_FOUND','API endpoint not found.',404);
   if(request.method!==methods[path])fail('METHOD_NOT_ALLOWED','Method not allowed.',405);
   if(!env.DB)fail('STORAGE_UNAVAILABLE','Account storage is not configured.',503);
@@ -177,7 +204,9 @@ export async function api(request,env) {
   if(request.method!=='GET') {
     if(request.headers.get('origin')!==url.origin || request.headers.get('sec-fetch-site')==='cross-site')fail('ORIGIN_FORBIDDEN','Cross-origin account requests are not allowed.',403);
   }
+  if(path==='/api/admin/password-reset'&&!adminAuthorized(request,env.BLOOM_ADMIN_RESET_SECRET))fail('AUTH_REQUIRED','Administrator authorization is required.',401);
   const body=request.method==='GET'?null:await readBody(request);
+  if(path==='/api/admin/password-reset')return adminPasswordReset(request,db,body,env.BLOOM_ADMIN_RESET_SECRET);
   if(['/api/auth/register','/api/auth/login','/api/auth/recover'].includes(path))return authenticate(request,db,body,path.split('/').at(-1));
   const session=await findSession(request,db);
   if(path==='/api/session')return response(session?state(session.row):{authenticated:false});

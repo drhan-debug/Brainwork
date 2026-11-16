@@ -8,6 +8,7 @@ import sourceWorker from '../server/index.js';
 
 const dist = new URL('../dist/', import.meta.url);
 const html = await readFile(new URL('index.html', dist), 'utf8');
+const wrangler = JSON.parse(await readFile(new URL('../wrangler.jsonc', import.meta.url), 'utf8'));
 const scripts = [...html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["']/gi)].map(match => match[1]);
 const styles = [...html.matchAll(/<link\b[^>]*\bhref=["']([^"']+\.css)["']/gi)].map(match => match[1]);
 assert.ok(scripts.some(path => path.startsWith('/assets/')), 'Build must include a generated script asset');
@@ -52,6 +53,17 @@ test('built application deep links serve the packaged HTML', async () => {
   const { env, calls } = host();
   const response = await builtWorker.fetch(request('/learning/review'), env);
   assert.equal(response.status, 200);
+  assert.equal(await response.text(), html);
+  assert.deepEqual(calls, []);
+});
+
+test('administrator reset deep link serves the app and local Wrangler enables SPA fallback', async () => {
+  assert.equal(wrangler.assets.not_found_handling, 'single-page-application');
+  assert.ok(wrangler.assets.run_worker_first.includes('/api/*'), 'API requests must still reach the Worker');
+  const { env, calls } = host();
+  const response = await builtWorker.fetch(request('/admin/reset'), env);
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get('content-type'), /^text\/html/);
   assert.equal(await response.text(), html);
   assert.deepEqual(calls, []);
 });

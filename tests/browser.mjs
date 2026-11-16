@@ -3,6 +3,7 @@
 // Speech mocks verify routing/transcription, never acoustic or phoneme quality.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
 import { applyProgress, blankLearner } from '../server/domain.js';
 import { englishScenarios } from '../src/content/scenarios.en.js';
@@ -36,6 +37,9 @@ async function fixture({saved=legacy,profiles=null,mobile=false,apiRoute=null}={
  const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));await page.clock.install({time:fixed});await page.goto(base);if(apiRoute)await page.getByRole('button',{name:'문장 세션 시작하기',exact:true}).waitFor();else await enterLocalDemo(page);if(!apiRoute)await page.getByLabel('학습자 선택').waitFor();return{page,context};
 }
 const state=page=>page.evaluate(()=>JSON.parse(localStorage.getItem('bloom-profiles-v2')));
+// Wrangler dev serves source assets without the packaged Worker's SPA fallback.
+// Keep the deep-link URL while loading the same app shell that production serves.
+async function adminResetShell(context){await context.route('**/admin/reset',async route=>route.fulfill({response:await route.fetch({url:base+'/'})}));}
 const choose=(page,id)=>page.getByLabel('학습자 선택').selectOption(id);
 const click=async(page,locator)=>{await page.clock.runFor(500);await locator.click();await page.clock.runFor(20);};
 const dialog=page=>page.getByRole('dialog');
@@ -420,6 +424,65 @@ try{
    await page.getByRole('button',{name:'저장 안 된 변경 취소',exact:true}).click();
    assert.equal(await selection.inputValue(),englishScenarios[1].id,'discard restores the unfinished selected scene');
    assert.deepEqual(requests,['GET /api/session','POST /api/progress']);
+  }finally{await context.close();}
+ });
+ await test('admin reset validates fields at 390px and rejects unauthorized attempts without a code',async()=>{
+  const context=await browser.newContext({viewport:{width:390,height:844}});context.setDefaultTimeout(7000);
+  await adminResetShell(context);
+  const requests=[];
+  await context.route('**/api/admin/password-reset',async route=>{requests.push(route.request());await route.fulfill({status:401,json:{code:'AUTH_REQUIRED'}});});
+  const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
+  try{
+   const response=await page.goto(base+'/admin/reset');assert.equal(response.status(),200);
+   await page.getByRole('heading',{name:'계정 비밀번호 재설정',exact:true}).waitFor();
+   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'reset form fits 390px');
+   const email=page.getByLabel('계정 이메일'),key=page.getByLabel('관리자 키'),password=page.getByLabel('새 비밀번호',{exact:true}),confirm=page.getByLabel('새 비밀번호 확인'),submit=page.getByRole('button',{name:'비밀번호 재설정',exact:true});
+   await submit.click();assert.equal(requests.length,0,'required fields prevent an empty request');
+   await email.fill('not-an-email');await key.fill('a'.repeat(64));await password.fill('new-secret-1');await confirm.fill('new-secret-1');
+   await submit.click();assert.equal(requests.length,0,'invalid email prevents a request');assert.equal(await email.evaluate(el=>el.validity.typeMismatch),true);
+   await email.fill('owner@example.test');await password.fill('abc');await confirm.fill('abc');await submit.click();assert.equal(requests.length,0,'short password prevents a request');
+   await password.fill('new-secret-1');await confirm.fill('different');await submit.click();assert.equal(requests.length,0,'mismatched confirmation prevents a request');assert.match(await page.getByRole('alert').innerText(),/서로 달라요/);assert.equal(await key.inputValue(),'a'.repeat(64),'local validation keeps key for correction');
+   await confirm.fill('new-secret-1');await key.fill('invalid-key');await submit.click();assert.equal(requests.length,0,'malformed key prevents a request');assert.match(await page.getByRole('alert').innerText(),/64자리/);
+   await key.fill('a'.repeat(64));await submit.click();await page.getByRole('alert').waitFor();assert.equal(requests.length,1);
+   assert.match(await page.getByRole('alert').innerText(),/비밀번호를 변경하지 못했어요|관리자 키|로그인/,'401 has a visible failure message');
+   assert.equal(await page.locator('.admin-reset-code').count(),0,'401 never displays a recovery code');
+   assert.equal(await key.inputValue(),'','key is cleared after request');assert.equal(await password.inputValue(),'','password is cleared after request');assert.equal(await confirm.inputValue(),'','confirmation is cleared after request');
+   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'error remains within 390px');
+  }finally{await context.close();}
+ });
+ await test('admin reset displays one-time code with copy and download while keeping secrets out of URL and storage',async()=>{
+  const context=await browser.newContext({viewport:{width:390,height:844},acceptDownloads:true});context.setDefaultTimeout(7000);
+  await adminResetShell(context);
+  const key='b'.repeat(64),password='fresh-secret-2',code='RECOVERY-CODE-ONE-TIME',requests=[];
+  await context.route('**/api/admin/password-reset',async route=>{const request=route.request();requests.push({url:request.url(),method:request.method(),headers:request.headers(),body:request.postDataJSON()});await route.fulfill({status:200,json:{recoveryCode:code}});});
+  const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
+  try{
+   await page.goto(base+'/admin/reset');
+   await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{window.__copiedCode=text;}}}));
+   await page.getByLabel('계정 이메일').fill('owner@example.test');await page.getByLabel('관리자 키').fill(key);await page.getByLabel('새 비밀번호',{exact:true}).fill(password);await page.getByLabel('새 비밀번호 확인').fill(password);
+   await page.getByRole('button',{name:'비밀번호 재설정',exact:true}).click();
+   await page.getByRole('heading',{name:'비밀번호가 변경되었어요',exact:true}).waitFor();
+   assert.equal(requests.length,1);assert.equal(requests[0].method,'POST');assert.equal(new URL(requests[0].url).pathname,'/api/admin/password-reset');
+   assert.equal(requests[0].headers.authorization,`Bearer ${key}`);assert.deepEqual(requests[0].body,{email:'owner@example.test',newPassword:password});
+   assert.equal(await page.locator('.admin-reset-code').innerText(),code);
+   await page.getByRole('button',{name:'복구 코드 복사',exact:true}).click();assert.equal(await page.evaluate(()=>window.__copiedCode),code);assert.ok(await page.getByRole('button',{name:'복사했어요',exact:true}).isVisible());
+   const downloadPromise=page.waitForEvent('download');await page.getByRole('button',{name:'파일로 저장',exact:true}).click();const download=await downloadPromise;assert.equal(download.suggestedFilename(),'bloom-recovery-code.txt');assert.match(await readFile(await download.path(),'utf8'),new RegExp(code));
+   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'success and actions fit 390px');
+   const location=page.url();assert.ok(!location.includes(key)&&!location.includes(password)&&!location.includes(code),'credentials and code stay out of URL');
+   const storage=await page.evaluate(()=>JSON.stringify({local:{...localStorage},session:{...sessionStorage}}));assert.ok(!storage.includes(key)&&!storage.includes(password)&&!storage.includes(code),'credentials and code stay out of web storage');
+   await page.reload();await page.getByRole('heading',{name:'계정 비밀번호 재설정',exact:true}).waitFor();assert.equal(await page.locator('.admin-reset-code').count(),0,'code disappears after reload');
+  }finally{await context.close();}
+ });
+ await test('normal user login remains available after visiting admin reset',async()=>{
+  const context=await browser.newContext({viewport:{width:390,height:844}});context.setDefaultTimeout(7000);
+  await adminResetShell(context);
+  const requests=[];await context.route('**/api/**',async route=>{const request=route.request(),path=new URL(request.url()).pathname;requests.push(request.method()+' '+path);if(path==='/api/session')return route.fulfill({json:{authenticated:false}});if(path==='/api/auth/login')return route.fulfill({status:401,json:{code:'INVALID_CREDENTIALS'}});return route.fulfill({status:500,json:{code:'UNEXPECTED_TEST_REQUEST'}});});
+  const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
+  try{
+   await page.goto(base+'/admin/reset');await page.getByRole('link',{name:'학습 공간으로'}).click();
+   await page.getByRole('heading',{name:'다시 만나 반가워요',exact:true}).waitFor();
+   await page.getByLabel('이메일',{exact:true}).fill('learner@example.test');await page.getByLabel('비밀번호',{exact:true}).fill('normal-password');await page.getByRole('button',{name:'로그인',exact:true}).last().click();
+   await page.getByRole('alert').waitFor();assert.match(await page.getByRole('alert').innerText(),/이메일 또는 비밀번호/);assert.deepEqual(requests,['GET /api/session','POST /api/auth/login']);
   }finally{await context.close();}
  });
  await test('linked SVG favicon is served successfully as an SVG image',async()=>{

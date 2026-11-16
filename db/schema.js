@@ -36,3 +36,10 @@ export const authLimits = sqliteTable('auth_limits', {
   windowStart: integer('window_start').notNull(),
   attempts: integer('attempts').notNull(),
 }, table => [primaryKey({columns: [table.key]})]);
+
+export const adminAuditEvents = sqliteTable('admin_audit_events', {
+  id: text('id').primaryKey(),
+  accountId: text('account_id').notNull().references(() => accounts.id, {onDelete: 'cascade'}),
+  eventType: text('event_type').notNull(),
+  createdAt: integer('created_at').notNull(),
+}, table => [index('admin_audit_events_account').on(table.accountId)]);
