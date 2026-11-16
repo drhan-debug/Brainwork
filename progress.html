@@ -15,17 +15,17 @@
 <body>
   <main>
     <header>
-      <div><div class="brand">BLOOM / WORK LOG</div><h1>복습할 상황을 더 쉽게 찾도록.</h1><p class="intro">현재 복습 대상에서 지난번 실패 문장이 많은 상황을 먼저 추천하고, 상황별 다시 볼 문장 수와 첫 복습 추천을 보여줍니다. 복습 노트 개선을 공개 사이트 v8에 반영했습니다.</p></div>
-      <span class="live"><span class="dot" aria-hidden="true"></span>v8 공개 배포 · 브라우저 25/25 통과</span>
+      <div><div class="brand">BLOOM / WORK LOG</div><h1>계정 복구를 관리자가 지원하도록.</h1><p class="intro">복구 코드와 로그인 세션이 없는 기존 계정의 암호를 Site 관리자가 서버에서 재설정할 수 있도록 했습니다. 전용 관리자 화면과 서버 보호 절차를 공개 사이트 v9에 반영했습니다. 실제 사용자 계정의 재설정은 아직 수행하지 않았습니다.</p></div>
+      <span class="live"><span class="dot" aria-hidden="true"></span>v9 공개 배포 · 브라우저 28/28 통과</span>
     </header>
     <section class="hero" aria-labelledby="current-phase">
-      <div><div class="eyebrow">CURRENT PHASE · TASK 16</div><h2 id="current-phase">복습 노트 우선순위 개선 배포 완료</h2><p>현재 복습 대상인 상황에서 지난번 실패한 문장이 많은 순서로 첫 복습을 추천합니다. 동률이면 가장 이른 복습 예정 시각, 다시 동률이면 원래 순서를 적용합니다. 상황별 다시 볼 문장 수와 첫 추천도 표시합니다.</p></div>
-      <div class="hero-side"><div class="eyebrow">V8 DEPLOYED / VERIFIED</div><strong>공개 사이트 v8 반영 완료</strong><small>독립 브라우저 25/25 · 집중 검증 1/1 · 빌드 · 정적 라우팅 9/9 통과.<br>독립 코드 검토 결함 없음 · 공개 HTTP 확인.</small></div>
+      <div><div class="eyebrow">CURRENT PHASE · TASK 17</div><h2 id="current-phase">관리자 암호 재설정 배포 완료</h2><p>별도 관리자 비밀키로 보호하는 <code>/admin/reset</code> 화면과 서버 엔드포인트를 추가했습니다. 재설정 시 새 암호를 설정하고 복구 코드를 발급하며 기존 세션을 종료합니다. 학습 기록을 보존하고 감사 기록을 남깁니다. 실제 사용자 계정은 아직 재설정하지 않았습니다.</p></div>
+      <div class="hero-side"><div class="eyebrow">V9 DEPLOYED / VERIFIED</div><strong>공개 사이트 v9 반영 완료</strong><small>Worker/D1 19/19 · 정적 10/10 · 날짜 13/13 · 브라우저 28/28 통과.<br>보안 리뷰 문제 없음 · 공개 관리자 경로와 접근 보호 확인.</small></div>
     </section>
     <section class="stats" aria-label="배포 기준과 새 작업 상태">
-      <div class="stat"><div class="label">현재 공개 배포 기준</div><div class="value"><code>e10b803</code></div><div class="note">GitHub main · Sites source 동일 커밋 · v8 배포</div></div>
-      <div class="stat"><div class="label">독립 브라우저 검증</div><div class="value">25 / 25</div><div class="note">복습 우선순위 집중 검증 1/1 추가</div></div>
-      <div class="stat"><div class="label">빌드·공개 경로</div><div class="value">통과</div><div class="note">정적 라우팅 9/9 · 공개 HTTP·익명 API 확인</div></div>
+      <div class="stat"><div class="label">현재 공개 배포 기준</div><div class="value"><code>07d85e3</code></div><div class="note">GitHub main · Sites source 동일 커밋 · v9 배포</div></div>
+      <div class="stat"><div class="label">독립 브라우저 검증</div><div class="value">28 / 28</div><div class="note">관리자 재설정 집중 검증 3/3 추가</div></div>
+      <div class="stat"><div class="label">빌드·서버·정적 경로</div><div class="value">통과</div><div class="note">Worker/D1 19/19 · 정적 10/10 · 날짜 13/13</div></div>
     </section>
     <section aria-labelledby="work-title">
       <div class="section-title"><h2 id="work-title">현재 작업</h2><span>완료 여부는 실제 확인한 근거로 갱신합니다</span></div>
@@ -46,17 +46,19 @@
         <article class="task"><span class="number">14</span><div><h3>복습 일정과 학습 이동 흐름 개선</h3><p>날짜순·계정 시간대 표시, 한국어 복습 힌트, 빈 복습 목록의 다음 일정·학습 버튼 구현<br>독립 브라우저 5건 추가·전체 현재 스위트 19/19 · 빌드·정적 경로 9/9 · v6 공개 HTTP 8/8</p></div><span class="status">v6 배포 확인</span></article>
         <article class="task"><span class="number">15</span><div><h3>홈에서 매일 학습 이어가기</h3><p>영어·일본어 첫 미완료 상황 추천 · 수동 선택과 서버 저장 실패 시 선택 유지 · 완료 후 진행·전체 완료 안내 · 복습 버튼<br>결함 수정 후 재검토 문제 없음 · 독립 브라우저 24/24 · 빌드 · 정적 라우팅 9/9 · v7 공개 확인</p></div><span class="status">v7 배포 확인</span></article>
         <article class="task"><span class="number">16</span><div><h3>복습 노트 우선순위와 첫 복습 추천</h3><p>현재 복습 대상 중 지난번 실패 문장이 많은 상황 우선 · 동률은 가장 이른 <code>dueAt</code>과 원래 순서<br>상황별 다시 볼 문장 수·첫 복습 추천 표시 · 독립 브라우저 25/25 · 집중 검증 1/1 · 코드 검토 결함 없음 · v8 공개 확인</p></div><span class="status">v8 배포 확인</span></article>
+        <article class="task"><span class="number">17</span><div><h3>관리자 암호 재설정</h3><p>복구 코드·로그인 세션 없이 Site 관리자가 별도 비밀키로 기존 계정 암호를 서버에서 재설정<br><code>/admin/reset</code> · 새 복구 코드 · 기존 세션 종료 · 학습 기록 보존 · 감사 기록 · 독립 브라우저 28/28 · v9 공개 확인</p></div><span class="status">v9 배포 확인</span></article>
       </div>
     </section>
     <div class="bottom">
+      <section class="info"><h2>v9 공개 배포에서 확인한 결과</h2><p>앱과 Sites source 커밋은 <code>07d85e3fd507d6922820dfe88ca2492af6f63f5e</code>입니다. Sites v9 <code>appgprj_6af72bb23db4819197c23e1e1c04d7d4~appgver_8c764a295f308191a480272ed8242e62</code>와 공개 배포 <code>appgdep_6afa4ec9c9fc8191a2835200b318dbcb</code>가 성공했습니다. Sites 관리자 비밀키 <code>BLOOM_ADMIN_RESET_SECRET</code>은 secret 설정과 환경 revision 1을 확인했습니다. 빌드, 실제 Worker/D1 19/19, 정적 10/10, 날짜 13/13, 독립 브라우저 28/28 및 집중 3/3이 통과했고 보안 리뷰에서 문제를 찾지 못했습니다. 공개 <code>/admin/reset</code>은 200, 미인가 재설정은 401, 인가된 잘못된 이메일은 400이었으며 실제 계정에 접근하지 않았습니다. 루트·자산·세션도 정상 응답했습니다.</p></section>
       <section class="info"><h2>v8 공개 배포에서 확인한 결과</h2><p>GitHub main과 Sites source 커밋은 <code>e10b803c607709517f359d142edc763b370b6a1d</code>입니다. Sites v8 <code>appgprj_6af72bb23db4819197c23e1e1c04d7d4~appgver_7683ae95278c8191a693d231a68941ee</code>와 공개 배포 <code>appgdep_6af937eb3e4c81918adf32b90aa99c6e</code>가 성공했습니다. 공개 루트와 <code>/learning/review</code>, JS·CSS 해시, 익명 API의 200 및 <code>authenticated: false</code>를 확인했습니다. 독립 브라우저 전체 25/25, 집중 검증 1/1, 빌드와 정적 라우팅 9/9가 통과했고 독립 코드 검토에서 결함이 없었습니다.</p></section>
       <section class="info"><h2>v7 공개 배포에서 확인한 결과</h2><p>GitHub main과 Sites source 커밋은 <code>adf3ba9aab1ce1c345d924b8a907decb77ab2f78</code>입니다. Sites v7 <code>appgprj_6af72bb23db4819197c23e1e1c04d7d4~appgver_fe8a88b4e5188191bfc7d8711c54a038</code>와 공개 배포 <code>appgdep_6af935975494819187acf59b1ef2f7f6</code>가 성공했습니다. 공개 루트와 <code>/learning/review</code>, JS·CSS 해시, <code>/api/session</code>의 200 및 익명 응답을 확인했습니다.</p></section>
       <section class="info"><h2>v6 공개 배포에서 확인한 결과</h2><p>공개 v6의 HTML·JS·CSS·파비콘이 로컬 빌드와 일치하고, 딥링크와 HEAD 요청이 정상 응답합니다. 비로그인 세션은 비인증 상태를 반환하며 개인 기록 저장은 401로 거절했습니다. 공개 HTTP 점검 8건이 통과했습니다. 당시 누적 자동 검증은 95건(기존 56 · ReactDOM/jsdom 2 · 브라우저 37)이었습니다. 복습 변경은 계정·로컬 데모의 서로 다른 시간대와 390px 화면을 브라우저 자동화로 검증했습니다. 이전 v5에서는 실제 Chromium으로 로컬 데모 전체 흐름과 기록 보존을 확인했습니다.</p></section>
       <section class="info"><h2>학습 기록 보존 기준</h2><p>기존 영어 80문장과 새 엄마 영어 100문장을 서로 다른 카탈로그와 ID로 구분합니다. 이전 학습 기록을 새 문장에 잘못 연결하지 않는 것이 기준입니다. 일본어 과정과 기존 기록을 유지하며, 과정·계정 통합 검증에서 기존 기록과 과정 구분을 확인했습니다.</p></section>
       <section class="info"><h2>음성 기능 확인 범위</h2><p>브라우저의 음성 인식 지원과 기기에 설치된 TTS 음성은 환경마다 다릅니다. 카카오톡 내장 브라우저에서는 마이크 기능을 지원하지 않을 수 있어 Safari로 열도록 안내합니다. 이 안내와 공유 음성 로직은 자동 검증을 통과했습니다. 데스크톱 Chromium에서 세션 전체 흐름을 확인했지만 이 환경에서는 음성 재생 장치가 없어 음질을 평가하지 못했습니다. 실제 아이폰 카카오톡·Safari 마이크와 설치 음성의 음질은 미확인입니다.</p></section>
-      <section class="info"><h2>현재 사이트와 진행 현황</h2><p style="margin-bottom:8px"><a href="https://bloom-brainwork.workspace-554491.chatgpt.site" target="_blank" rel="noopener noreferrer">현재 공개된 Bloom 사이트 열기</a> · v8 배포 완료 · ChatGPT 로그인 불필요</p><p>이 화면은 저장소·로컬에서 여는 단일 HTML 보고서이며 배포 앱에 포함된 화면은 아닙니다. 외부 파일 없이 열 수 있고, 자동 새로고침을 켜 두면 20초마다 저장된 변경을 표시합니다. 시간은 미국 로스앤젤레스 기준입니다.</p></section>
+      <section class="info"><h2>현재 사이트와 진행 현황</h2><p style="margin-bottom:8px"><a href="https://bloom-brainwork.workspace-554491.chatgpt.site" target="_blank" rel="noopener noreferrer">현재 공개된 Bloom 사이트 열기</a> · v9 배포 완료 · ChatGPT 로그인 불필요</p><p>이 화면은 저장소·로컬에서 여는 단일 HTML 보고서이며 배포 앱에 포함된 화면은 아닙니다. 외부 파일 없이 열 수 있고, 자동 새로고침을 켜 두면 20초마다 저장된 변경을 표시합니다. 시간은 미국 로스앤젤레스 기준입니다.</p></section>
     </div>
-    <footer><div>마지막 업데이트 <time datetime="2026-11-14T20:42:04-08:00">2026. 11. 14. 20:42 PST</time> · America/Los_Angeles</div><label class="refresh"><input id="auto-refresh" type="checkbox" checked>20초마다 자동 새로고침</label></footer>
+    <footer><div>마지막 업데이트 <time datetime="2026-11-15T16:32:09-08:00">2026. 11. 15. 16:32 PST</time> · America/Los_Angeles</div><label class="refresh"><input id="auto-refresh" type="checkbox" checked>20초마다 자동 새로고침</label></footer>
   </main>
   <script>
     (() => {
