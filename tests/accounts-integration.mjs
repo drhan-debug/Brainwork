@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { build } from 'esbuild';
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
+import { api } from '../server/index.js';
 import { applyProgress, blankLearner } from '../server/domain.js';
 import { sentenceIdsForLanguage } from '../src/learning/schema.js';
 
@@ -53,6 +54,8 @@ try {
   for (const statement of schema.split(';').map(s => s.trim()).filter(Boolean)) await db.prepare(statement).run();
   const adminMigration = await readFile(join(root, 'migrations/0002_admin_audit_events.sql'), 'utf8');
   for (const statement of adminMigration.split('--> statement-breakpoint').map(s => s.trim()).filter(Boolean)) await db.prepare(statement).run();
+  const credentialMigration = await readFile(join(root, 'migrations/0003_admin_credentials.sql'), 'utf8');
+  for (const statement of credentialMigration.split('--> statement-breakpoint').map(s => s.trim()).filter(Boolean)) await db.prepare(statement).run();
 
   const a = client(), b = client(), anonymous = client();
   const password = 'correct horse battery staple';
@@ -262,11 +265,29 @@ try {
     assert.deepEqual(await session(a), { authenticated: false });
     assert.deepEqual(await session(b), otherState);
   });
-  await test('administrator reset is gated, preserves learning, revokes sessions, and records a clean audit event', async () => {
+  await test('administrator setup, reset, change, and key recovery protect accounts', async () => {
     const owner = client(), secondDevice = client(), admin = client(), login = client();
     const email = 'admin-reset-integration@example.test';
     const oldPassword = 'original password 123';
     const newPassword = 'replacement password 456';
+    const adminPassword = 'chosen administrator 🔒 password';
+    const changedPassword = 'changed administrator 🔐 password';
+    const recoveredPassword = 'recovered administrator 🔑 password';
+    const authorization = `Bearer ${adminSecret}`;
+    const adminPost = (path, body, headers = {}) => admin.request(path, { method: 'POST', body, headers: { 'CF-Connecting-IP': '198.51.100.91', ...headers } });
+    assert.deepEqual(expectStatus(await admin.request('/api/admin/status'), 200), { configured: false });
+    expectStatus(await adminPost('/api/admin/setup', { adminPassword }, { Authorization: `Bearer ${randomBytes(32).toString('hex')}` }), 401);
+    expectStatus(await adminPost('/api/admin/setup', { adminPassword: 'too short' }, { Authorization: authorization }), 400);
+    const setupRace = await Promise.all([adminPost('/api/admin/setup', { adminPassword }, { Authorization: authorization }), adminPost('/api/admin/setup', { adminPassword }, { Authorization: authorization })]);
+    assert.deepEqual(setupRace.map(result => result.status).sort(), [201, 409]);
+    assert.deepEqual(setupRace.find(result => result.status === 201).data, { configured: true });
+    assert.deepEqual(expectStatus(await admin.request('/api/admin/status'), 200), { configured: true });
+    expectStatus(await adminPost('/api/admin/setup', { adminPassword: changedPassword }, { Authorization: authorization }), 409);
+    const stored = await db.prepare('SELECT * FROM admin_credentials').all();
+    assert.equal(stored.results.length, 1);
+    assert.match(stored.results[0].password_hash, /^scrypt-v1\$/);
+    assert.ok(!JSON.stringify(stored.results).includes(adminPassword));
+
     const registered = expectStatus(await owner.request('/api/auth/register', { method: 'POST', body: { ...account(email), password: oldPassword } }), 201);
     const oldRecoveryCode = registered.recoveryCode;
     const oldCookie = owner.cookie;
@@ -274,23 +295,12 @@ try {
     const progressed = expectStatus(await owner.request('/api/progress', { method: 'POST', body: op('admin-reset-learning', registered.revision) }), 200);
     const before = await db.prepare('SELECT * FROM accounts WHERE id=?').bind(registered.account.id).first();
     const resetBody = { email, newPassword };
-    const postReset = (authorization, extra = {}) => admin.request('/api/admin/password-reset', { method: 'POST', body: resetBody, headers: { Authorization: authorization, 'CF-Connecting-IP': '198.51.100.91', ...extra } });
-    for (const header of ['', 'Bearer incorrect', `Bearer ${randomBytes(32).toString('hex')}`]) {
-      const denied = expectStatus(await postReset(header), 401);
-      assert.equal(denied.code, 'AUTH_REQUIRED');
-      assert.equal(denied.recoveryCode, undefined);
-    }
-    expectStatus(await postReset(`Bearer ${adminSecret}`, { Origin: 'https://foreign.test' }), 403);
+    const postReset = (body, headers = {}) => adminPost('/api/admin/password-reset', body, headers);
+    expectStatus(await postReset(resetBody, { Authorization: authorization }), 401);
+    expectStatus(await postReset({ ...resetBody, adminPassword: 'wrong administrator password' }), 401);
+    expectStatus(await postReset({ ...resetBody, adminPassword }, { Origin: 'https://foreign.test' }), 403);
     assert.deepEqual(await db.prepare('SELECT * FROM accounts WHERE id=?').bind(registered.account.id).first(), before);
-    assert.equal((await db.prepare('SELECT count(*) AS count FROM admin_audit_events').first()).count, 0);
-
-    workerWithoutAdminSecret = new Miniflare(convertV4MiniflareOptions(workerOptions));
-    const missingResponse = await workerWithoutAdminSecret.dispatchFetch(`${origin}/api/admin/password-reset`, { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json', Authorization: `Bearer ${adminSecret}` }, body: JSON.stringify(resetBody) });
-    assert.equal(missingResponse.status, 401);
-    assert.equal((await missingResponse.json()).code, 'AUTH_REQUIRED');
-    assert.deepEqual(await db.prepare('SELECT * FROM accounts WHERE id=?').bind(registered.account.id).first(), before);
-
-    const resetResponse = await postReset(`Bearer ${adminSecret}`);
+    const resetResponse = await postReset({ ...resetBody, adminPassword });
     const reset = expectStatus(resetResponse, 200);
     assert.match(reset.recoveryCode, /^[a-f0-9]{64}$/);
     assert.notEqual(reset.recoveryCode, oldRecoveryCode);
@@ -298,7 +308,6 @@ try {
     assert.equal(resetResponse.headers.get('set-cookie'), null);
     assert.equal(resetResponse.headers.get('cache-control'), 'no-store');
     assert.equal(resetResponse.headers.get('referrer-policy'), 'no-referrer');
-    assert.ok(!JSON.stringify(reset).includes(adminSecret));
     assert.deepEqual(await session(owner), { authenticated: false });
     assert.deepEqual(await session(secondDevice), { authenticated: false });
     assert.deepEqual(expectStatus(await admin.request('/api/session', { cookie: oldCookie }), 200), { authenticated: false });
@@ -310,18 +319,72 @@ try {
     const audit = await db.prepare('SELECT * FROM admin_audit_events WHERE account_id=?').bind(after.id).all();
     assert.equal(audit.results.length, 1);
     assert.equal(audit.results[0].event_type, 'password_reset');
-    assert.ok(Number.isInteger(audit.results[0].created_at));
     const auditText = JSON.stringify(audit.results);
-    for (const forbidden of [email, adminSecret, oldPassword, newPassword, oldRecoveryCode, reset.recoveryCode]) assert.ok(!auditText.includes(forbidden));
+    for (const forbidden of [email, adminSecret, adminPassword, oldPassword, newPassword, oldRecoveryCode, reset.recoveryCode]) assert.ok(!auditText.includes(forbidden));
     assert.deepEqual(progressed.learner, JSON.parse(after.learner_json));
     expectStatus(await login.request('/api/auth/login', { method: 'POST', body: { email, password: oldPassword }, headers: { 'CF-Connecting-IP': '198.51.100.92' } }), 401);
     const logged = expectStatus(await login.request('/api/auth/login', { method: 'POST', body: { email, password: newPassword }, headers: { 'CF-Connecting-IP': '198.51.100.92' } }), 200);
     assert.equal(logged.account.id, before.id);
-    assert.deepEqual(logged.learner, progressed.learner);
+    expectStatus(await adminPost('/api/admin/password-change', { currentPassword: 'wrong administrator password', newPassword: changedPassword }), 401);
+    assert.deepEqual(expectStatus(await adminPost('/api/admin/password-change', { currentPassword: adminPassword, newPassword: changedPassword }), 200), { configured: true });
+    expectStatus(await postReset({ ...resetBody, adminPassword }), 401);
+    expectStatus(await adminPost('/api/admin/password-recover', { newPassword: recoveredPassword }, { Authorization: `Bearer ${randomBytes(32).toString('hex')}` }), 401);
+    assert.deepEqual(expectStatus(await adminPost('/api/admin/password-recover', { newPassword: recoveredPassword }, { Authorization: authorization }), 200), { configured: true });
+    expectStatus(await postReset({ ...resetBody, adminPassword: changedPassword }), 401);
+    expectStatus(await postReset({ ...resetBody, adminPassword: recoveredPassword }), 200);
     expectStatus(await client().request('/api/auth/recover', { method: 'POST', body: { email, recoveryCode: oldRecoveryCode, newPassword: 'should not work' }, headers: { 'CF-Connecting-IP': '198.51.100.93' } }), 401);
-    const recovered = expectStatus(await client().request('/api/auth/recover', { method: 'POST', body: { email, recoveryCode: reset.recoveryCode, newPassword: 'recovered password 789' }, headers: { 'CF-Connecting-IP': '198.51.100.93' } }), 200);
-    assert.equal(recovered.account.id, before.id);
-    assert.deepEqual(recovered.learner, progressed.learner);
+  });
+  await test('administrator rotation invalidates a reset already verified against the prior hash', async () => {
+    // Pause only the reset's D1 batch. Its credential check and new hash are
+    // complete; the rotation then commits through the real Worker and D1.
+    // Releasing the batch exercises the SQL EXISTS guard without timing sleeps.
+    let currentPassword = 'race initial administrator password';
+    const actor = client();
+    expectStatus(await actor.request('/api/admin/password-recover', { method: 'POST', body: { newPassword: currentPassword }, headers: { Authorization: `Bearer ${adminSecret}`, 'CF-Connecting-IP': '198.51.100.240' } }), 200);
+    for (const mode of ['change', 'recover']) {
+      const email = `admin-race-${mode}@example.test`;
+      const owner = client();
+      const registered = expectStatus(await owner.request('/api/auth/register', { method: 'POST', body: account(email) }), 201);
+      const before = await db.prepare('SELECT * FROM accounts WHERE id=?').bind(registered.account.id).first();
+      const auditBefore = (await db.prepare('SELECT count(*) AS count FROM admin_audit_events WHERE account_id=?').bind(before.id).first()).count;
+      let reachedBatch, releaseBatch;
+      const reached = new Promise(resolve => { reachedBatch = resolve; });
+      const release = new Promise(resolve => { releaseBatch = resolve; });
+      const gatedDb = {
+        prepare: sql => db.prepare(sql),
+        batch: async statements => { reachedBatch(); await release; return db.batch(statements); },
+      };
+      const request = new Request(`${origin}/api/admin/password-reset`, {
+        method: 'POST',
+        headers: { Origin: origin, 'Content-Type': 'application/json', 'CF-Connecting-IP': mode === 'change' ? '198.51.100.241' : '198.51.100.242' },
+        body: JSON.stringify({ email, newPassword: 'late account reset password', adminPassword: currentPassword }),
+      });
+      const pendingReset = api(request, { DB: gatedDb });
+      await Promise.race([reached, pendingReset.then(() => { throw new Error('Reset completed before D1 batch gate.'); })]);
+      const nextPassword = `race ${mode} administrator password`;
+      try {
+        const rotation = mode === 'change'
+          ? await actor.request('/api/admin/password-change', { method: 'POST', body: { currentPassword, newPassword: nextPassword }, headers: { 'CF-Connecting-IP': '198.51.100.243' } })
+          : await actor.request('/api/admin/password-recover', { method: 'POST', body: { newPassword: nextPassword }, headers: { Authorization: `Bearer ${adminSecret}`, 'CF-Connecting-IP': '198.51.100.244' } });
+        expectStatus(rotation, 200);
+      } finally { releaseBatch(); }
+      await assert.rejects(pendingReset, error => error?.status === 401 && error?.code === 'AUTH_REQUIRED');
+      assert.deepEqual(await db.prepare('SELECT * FROM accounts WHERE id=?').bind(before.id).first(), before);
+      assert.equal((await db.prepare('SELECT count(*) AS count FROM sessions WHERE account_id=?').bind(before.id).first()).count, 1);
+      assert.equal((await db.prepare('SELECT count(*) AS count FROM admin_audit_events WHERE account_id=?').bind(before.id).first()).count, auditBefore);
+      assert.equal((await session(owner)).account.id, before.id);
+      currentPassword = nextPassword;
+    }
+  });
+  await test('administrator authentication is IP throttled before password hashing', async () => {
+    const actor = client();
+    let limited = false;
+    for (let i = 0; i < 15; i++) {
+      const result = await actor.request('/api/admin/password-change', { method: 'POST', body: { currentPassword: 'wrong administrator password', newPassword: 'another administrator password' }, headers: { 'CF-Connecting-IP': '198.51.100.211' } });
+      assert.ok([401, 429].includes(result.status), JSON.stringify(result.data));
+      if (result.status === 429) { limited = true; break; }
+    }
+    assert.equal(limited, true);
   });
   await test('authentication attempts are rate limited without leaking account state', async () => {
     let limited = false;

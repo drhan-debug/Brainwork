@@ -43,3 +43,9 @@ export const adminAuditEvents = sqliteTable('admin_audit_events', {
   eventType: text('event_type').notNull(),
   createdAt: integer('created_at').notNull(),
 }, table => [index('admin_audit_events_account').on(table.accountId)]);
+
+export const adminCredentials = sqliteTable('admin_credentials', {
+  id: integer('id').primaryKey(),
+  passwordHash: text('password_hash').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});

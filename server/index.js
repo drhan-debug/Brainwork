@@ -14,6 +14,16 @@ function passwordInput(password) {
   if (typeof password !== 'string' || [...password].length<4 || [...password].length>128 || encoder.encode(password).length>512) fail('INVALID_PASSWORD','Use a password of 4–128 characters.');
   return password;
 }
+function adminPasswordInput(password) {
+  if (typeof password !== 'string' || [...password].length<12 || [...password].length>128 || encoder.encode(password).length>512) fail('INVALID_ADMIN_PASSWORD','Use an administrator password of 12–128 characters.');
+  return password;
+}
+function adminCandidate(password) {
+  // Bound the work before the KDF; authentication failures have one public shape.
+  if (typeof password !== 'string' || encoder.encode(password).length>512 || [...password].length>128) adminAuthFailed();
+  return password;
+}
+function adminAuthFailed() { fail('AUTH_REQUIRED','Administrator authorization is required.',401); }
 async function passwordHash(password) {
   const salt = random(16);
   const key = await scryptAsync(encoder.encode(password),fromHex(salt),scryptOptions);
@@ -79,6 +89,13 @@ async function rateLimit(request,db,email) {
   await db.prepare('DELETE FROM auth_limits WHERE key IN (SELECT key FROM auth_limits WHERE window_start<? LIMIT 100)').bind(now-86400000).run();
   await db.prepare('DELETE FROM sessions WHERE token_hash IN (SELECT token_hash FROM sessions WHERE expires_at<? LIMIT 100)').bind(now).run();
 }
+async function adminRateLimit(request,db,kind) {
+  const now=Date.now(), window=15*60000;
+  const ip=request.headers.get('cf-connecting-ip')||'local';
+  const key=await digest(`admin:${kind}:ip:${ip}`);
+  const result=await db.prepare('INSERT INTO auth_limits(key,window_start,attempts) VALUES(?,?,1) ON CONFLICT(key) DO UPDATE SET attempts=CASE WHEN auth_limits.window_start<? THEN 1 ELSE auth_limits.attempts+1 END, window_start=CASE WHEN auth_limits.window_start<? THEN excluded.window_start ELSE auth_limits.window_start END RETURNING attempts').bind(key,now,now-window,now-window).first();
+  if(result.attempts>12)fail('RATE_LIMITED','Too many attempts. Try again in 15 minutes.',429);
+}
 function adminAuthorized(request,secret) {
   if(typeof secret!=='string'||!/^[a-f0-9]{64}$/i.test(secret))return false;
   const supplied=/^Bearer ([a-f0-9]{64})$/i.exec(request.headers.get('authorization')||'')?.[1]||'';
@@ -88,22 +105,57 @@ function adminAuthorized(request,secret) {
   for(let i=0;i<64;i++)diff|=expected.charCodeAt(i)^actual.charCodeAt(i);
   return diff===0;
 }
-async function adminPasswordReset(request,db,body,secret) {
-  if(!adminAuthorized(request,secret))fail('AUTH_REQUIRED','Administrator authorization is required.',401);
+async function adminCredential(db) {
+  return db.prepare('SELECT password_hash FROM admin_credentials WHERE id=1').first();
+}
+async function adminSetup(request,db,body,secret) {
+  if(!adminAuthorized(request,secret))adminAuthFailed();
+  adminPasswordInput(body.adminPassword);
+  // The singleton primary key makes simultaneous setup requests single-winner.
+  const hash=await passwordHash(body.adminPassword);
+  const result=await db.prepare('INSERT INTO admin_credentials(id,password_hash,updated_at) VALUES(1,?,?) ON CONFLICT(id) DO NOTHING').bind(hash,Date.now()).run();
+  if(result.meta.changes!==1)fail('ADMIN_ALREADY_CONFIGURED','Administrator password is already configured.',409);
+  return response({configured:true},201,{'Referrer-Policy':'no-referrer'});
+}
+async function adminPasswordChange(request,db,body) {
+  await adminRateLimit(request,db,'change');
+  const current=adminCandidate(body.currentPassword);
+  adminPasswordInput(body.newPassword);
+  const credential=await adminCredential(db);
+  if(!credential || !await passwordMatches(current,credential.password_hash))adminAuthFailed();
+  const hash=await passwordHash(body.newPassword);
+  const result=await db.prepare('UPDATE admin_credentials SET password_hash=?,updated_at=? WHERE id=1 AND password_hash=?').bind(hash,Date.now(),credential.password_hash).run();
+  if(result.meta.changes!==1)adminAuthFailed();
+  return response({configured:true},200,{'Referrer-Policy':'no-referrer'});
+}
+async function adminPasswordRecover(request,db,body,secret) {
+  if(!adminAuthorized(request,secret))adminAuthFailed();
+  adminPasswordInput(body.newPassword);
+  const credential=await adminCredential(db);
+  if(!credential)adminAuthFailed();
+  const hash=await passwordHash(body.newPassword);
+  const result=await db.prepare('UPDATE admin_credentials SET password_hash=?,updated_at=? WHERE id=1 AND password_hash=?').bind(hash,Date.now(),credential.password_hash).run();
+  if(result.meta.changes!==1)adminAuthFailed();
+  return response({configured:true},200,{'Referrer-Policy':'no-referrer'});
+}
+async function adminPasswordReset(request,db,body) {
+  await adminRateLimit(request,db,'reset');
+  const candidate=adminCandidate(body.adminPassword);
   const email=emailInput(body.email);
   passwordInput(body.newPassword);
-  await rateLimit(request,db,`admin-reset:${email}`);
+  const credential=await adminCredential(db);
+  if(!credential || !await passwordMatches(candidate,credential.password_hash))adminAuthFailed();
   const row=await db.prepare('SELECT id,recovery_hash FROM accounts WHERE email=?').bind(email).first();
   if(!row)fail('ACCOUNT_NOT_FOUND','Account not found.',404);
   const recoveryCode=random();
   const recoveryHash=await digest(recoveryCode);
   const password=await passwordHash(body.newPassword);
   const results=await db.batch([
-    db.prepare('UPDATE accounts SET password_hash=?,recovery_hash=? WHERE id=? AND recovery_hash=?').bind(password,recoveryHash,row.id,row.recovery_hash),
+    db.prepare('UPDATE accounts SET password_hash=?,recovery_hash=? WHERE id=? AND recovery_hash=? AND EXISTS(SELECT 1 FROM admin_credentials WHERE id=1 AND password_hash=?)').bind(password,recoveryHash,row.id,row.recovery_hash,credential.password_hash),
     db.prepare('DELETE FROM sessions WHERE account_id=? AND EXISTS(SELECT 1 FROM accounts WHERE id=? AND recovery_hash=?)').bind(row.id,row.id,recoveryHash),
     db.prepare('INSERT INTO admin_audit_events(id,account_id,event_type,created_at) SELECT ?,id,?,? FROM accounts WHERE id=? AND recovery_hash=?').bind(crypto.randomUUID(),'password_reset',Date.now(),row.id,recoveryHash),
   ]);
-  if(results[0].meta.changes!==1)fail('RESET_CONFLICT','Account changed. Retry the reset.',409);
+  if(results[0].meta.changes!==1)adminAuthFailed();
   return response({recoveryCode},200,{'Referrer-Policy':'no-referrer'});
 }
 async function sessionStatement(db,accountId,token,at=Date.now()) {
@@ -196,7 +248,7 @@ async function updateAccount(db,row,body,path,sessionHash) {
 }
 export async function api(request,env) {
   const url=new URL(request.url),path=url.pathname;
-  const methods={'/api/session':'GET','/api/auth/register':'POST','/api/auth/login':'POST','/api/auth/logout':'POST','/api/auth/recover':'POST','/api/admin/password-reset':'POST','/api/profile':'PATCH','/api/progress':'POST','/api/import':'POST'};
+  const methods={'/api/session':'GET','/api/auth/register':'POST','/api/auth/login':'POST','/api/auth/logout':'POST','/api/auth/recover':'POST','/api/admin/status':'GET','/api/admin/setup':'POST','/api/admin/password-reset':'POST','/api/admin/password-change':'POST','/api/admin/password-recover':'POST','/api/profile':'PATCH','/api/progress':'POST','/api/import':'POST'};
   if(!methods[path])fail('NOT_FOUND','API endpoint not found.',404);
   if(request.method!==methods[path])fail('METHOD_NOT_ALLOWED','Method not allowed.',405);
   if(!env.DB)fail('STORAGE_UNAVAILABLE','Account storage is not configured.',503);
@@ -204,9 +256,16 @@ export async function api(request,env) {
   if(request.method!=='GET') {
     if(request.headers.get('origin')!==url.origin || request.headers.get('sec-fetch-site')==='cross-site')fail('ORIGIN_FORBIDDEN','Cross-origin account requests are not allowed.',403);
   }
-  if(path==='/api/admin/password-reset'&&!adminAuthorized(request,env.BLOOM_ADMIN_RESET_SECRET))fail('AUTH_REQUIRED','Administrator authorization is required.',401);
+  if(path==='/api/admin/setup'||path==='/api/admin/password-recover') {
+    await adminRateLimit(request,db,path==='/api/admin/setup'?'setup':'recover');
+    if(!adminAuthorized(request,env.BLOOM_ADMIN_RESET_SECRET))adminAuthFailed();
+  }
   const body=request.method==='GET'?null:await readBody(request);
-  if(path==='/api/admin/password-reset')return adminPasswordReset(request,db,body,env.BLOOM_ADMIN_RESET_SECRET);
+  if(path==='/api/admin/status')return response({configured:!!await adminCredential(db)},200,{'Referrer-Policy':'no-referrer'});
+  if(path==='/api/admin/setup')return adminSetup(request,db,body,env.BLOOM_ADMIN_RESET_SECRET);
+  if(path==='/api/admin/password-reset')return adminPasswordReset(request,db,body);
+  if(path==='/api/admin/password-change')return adminPasswordChange(request,db,body);
+  if(path==='/api/admin/password-recover')return adminPasswordRecover(request,db,body,env.BLOOM_ADMIN_RESET_SECRET);
   if(['/api/auth/register','/api/auth/login','/api/auth/recover'].includes(path))return authenticate(request,db,body,path.split('/').at(-1));
   const session=await findSession(request,db);
   if(path==='/api/session')return response(session?state(session.row):{authenticated:false});
@@ -223,9 +282,9 @@ export default {
     const url=new URL(request.url);
     if(url.pathname.startsWith('/api/')){
       try{return await api(request,env);}catch(error){
-        if(error instanceof ApiError)return response({code:error.code,error:error.message,...(error.state?{state:error.state}:{})},error.status,error.status===429?{'Retry-After':'900'}:{});
+        if(error instanceof ApiError)return response({code:error.code,error:error.message,...(error.state?{state:error.state}:{})},error.status,{...(error.status===429?{'Retry-After':'900'}:{}),...(url.pathname.startsWith('/api/admin/')?{'Referrer-Policy':'no-referrer'}:{})});
         // Deliberately do not log requests, credentials, cookie values, or SQL parameters.
-        return response({code:'INTERNAL_ERROR',error:'The account service could not complete this request. Please try again.'},500);
+        return response({code:'INTERNAL_ERROR',error:'The account service could not complete this request. Please try again.'},500,url.pathname.startsWith('/api/admin/')?{'Referrer-Policy':'no-referrer'}:{});
       }
     }
     // Build-time replacement embeds the Vite output for Sites' single Worker format.

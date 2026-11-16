@@ -15,6 +15,13 @@
       "when": 1794788641982,
       "tag": "0001_fast_wolfpack",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1794789470309,
+      "tag": "0002_fair_wasp",
+      "breakpoints": true
     }
   ]
 }
