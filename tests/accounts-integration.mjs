@@ -10,6 +10,7 @@ import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 import { api } from '../server/index.js';
 import { applyProgress, blankLearner } from '../server/domain.js';
 import { sentenceIdsForLanguage } from '../src/learning/schema.js';
+import { applyCustomCardOperation, calendarAt, validateCustomCards } from '../src/learning/customCards.js';
 
 const root = new URL('..', import.meta.url).pathname;
 const temporary = await mkdtemp(join(tmpdir(), 'brainwork-accounts-test-'));
@@ -32,7 +33,7 @@ function client() {
       const response = await worker.dispatchFetch(`${origin}${path}`, {
         method,
         headers: { ...(method === 'GET' ? {} : { Origin: origin, 'Content-Type': 'application/json' }), ...(override ?? cookie ? { Cookie: override ?? cookie } : {}), ...headers },
-        ...(body === undefined ? {} : { body: JSON.stringify(expectedAccountId && ['/api/profile', '/api/progress', '/api/import', '/api/auth/logout'].includes(path) ? { expectedAccountId, ...body } : body) }),
+        ...(body === undefined ? {} : { body: JSON.stringify(expectedAccountId && ['/api/profile', '/api/progress', '/api/import', '/api/auth/logout', '/api/card-lookup'].includes(path) ? { expectedAccountId, ...body } : body) }),
       });
       const setCookie = response.headers.get('set-cookie');
       if (setCookie) cookie = setCookie.split(';')[0];
@@ -47,7 +48,20 @@ function client() {
 
 try {
   await build({ entryPoints: [join(root, 'server/index.js')], outfile: join(temporary, 'worker.mjs'), bundle: true, format: 'esm', platform: 'browser', target: 'es2022' });
-  const workerOptions = { modules: true, modulesRoot: temporary, scriptPath: join(temporary, 'worker.mjs'), compatibilityDate: '2026-11-01', d1Databases: ['DB'] };
+  const upstream=[];let providerMode='ok';
+  const provider=async request=>{
+    const url=new URL(request.url);upstream.push(url.toString());
+    if(providerMode==='unavailable')return new Response('unavailable',{status:503});
+    if(providerMode==='oversize')return new Response('x'.repeat(131073),{status:200});
+    if(providerMode==='dictionary-404'&&url.hostname==='api.dictionaryapi.dev')return new Response('{}',{status:404});
+    let data;
+    if(url.hostname==='api.mymemory.translated.net')data={responseStatus:providerMode==='bad-status'?403:200,quotaFinished:providerMode==='quota',responseData:{translatedText:providerMode==='missing'?'hello':providerMode==='excessive'?'가'.repeat(361):providerMode==='html'?'<b>안녕</b>':'안녕하세요'}};
+    else if(url.hostname==='api.dictionaryapi.dev')data=[{word:'hello',meanings:providerMode==='malformed'?'wrong':[{definitions:[{definition:'A greeting.'}]}]}];
+    else if(url.hostname==='jisho.org')data={data:providerMode==='malformed'?'wrong':providerMode==='jisho-empty'?[]:[{japanese:[{word:'猫',reading:'ねこ'}],senses:[{english_definitions:['cat']}]}]};
+    else throw new Error('Unexpected upstream host');
+    return new Response(JSON.stringify(data),{headers:{'Content-Type':'application/json'}});
+  };
+  const workerOptions = { modules: true, modulesRoot: temporary, scriptPath: join(temporary, 'worker.mjs'), compatibilityDate: '2026-11-01', d1Databases: ['DB'], outboundService: provider };
   worker = new Miniflare(convertV4MiniflareOptions({ ...workerOptions, bindings: { BLOOM_ADMIN_RESET_SECRET: adminSecret } }));
   const db = await worker.getD1Database('DB');
   const schema = await readFile(join(root, 'migrations/0001_accounts.sql'), 'utf8');
@@ -64,6 +78,24 @@ try {
   const session = async actor => expectStatus(await actor.request('/api/session'), 200);
   const op = (number, revision, extra = {}) => ({ operationId: `integration-operation-${number}`, revision, type: 'dialogueSession', elapsedMs: 90000, ...extra });
   let initialA, initialB, recoveryCode;
+  await test('custom card calendar scheduling crosses DST and preserves early due dates', async () => {
+    const id='123e4567-e89b-42d3-a456-426614174000', timezone='America/New_York', at=Date.parse('2026-03-07T14:30:00Z');
+    let cards=applyCustomCardOperation([], {type:'customCardAdd',cardId:id,front:' Hello ',back:' World '}, timezone, at);
+    assert.equal(cards[0].dueAt,Date.parse('2026-03-09T13:30:00Z'));
+    assert.equal(cards[0].front,'Hello');assert.equal(cards[0].back,'World');
+    cards=applyCustomCardOperation(cards,{type:'customCardReview',cardId:id,remembered:true},timezone,at+1000);
+    assert.equal(cards[0].dueAt,Date.parse('2026-03-09T13:30:00Z'));assert.equal(cards[0].stage,0);
+    const due=cards[0].dueAt;
+    cards=applyCustomCardOperation(cards,{type:'customCardReview',cardId:id,remembered:true},timezone,due);
+    assert.equal(cards[0].stage,1);assert.equal(cards[0].dueAt,Date.parse('2026-03-12T13:30:00Z'));
+    for(const [stage,days] of [[2,7],[3,14],[4,30],[5,60],[5,60]]){
+      const reviewAt=cards[0].dueAt;
+      cards=applyCustomCardOperation(cards,{type:'customCardReview',cardId:id,remembered:true},timezone,reviewAt);
+      assert.equal(cards[0].stage,stage);assert.equal(cards[0].dueAt,calendarAt(reviewAt,days,timezone));
+    }
+    cards=applyCustomCardOperation(cards,{type:'customCardReview',cardId:id,remembered:false},timezone,Date.parse('2026-11-01T04:30:00Z'));
+    assert.equal(cards[0].stage,0);assert.equal(cards[0].dueAt,Date.parse('2026-11-02T05:00:00Z'));
+  });
   await test('review scheduling follows account-local midnight/calendar days across DST and early practice', async () => {
     for (const [timezone, at, midnight, threeDays] of [
       ['America/New_York', '2026-03-08T04:30:00Z', '2026-03-08T05:00:00Z', '2026-03-11T03:30:00Z'],
@@ -98,6 +130,111 @@ try {
     const rows = await db.prepare('SELECT password_hash, recovery_hash FROM accounts').all();
     assert.equal(rows.results.length, 2);
     for (const row of rows.results) { assert.notEqual(row.password_hash, password); assert.notEqual(row.recovery_hash, recoveryCode); }
+  });
+  await test('authenticated lookup uses hardcoded providers and saves hint/source through progress', async () => {
+    const actor=client();expectStatus(await actor.request('/api/auth/register',{method:'POST',body:account('saved-lookup@example.test')}),201);
+    const before=await session(actor),calls=upstream.length;
+    const result=expectStatus(await actor.request('/api/card-lookup',{method:'POST',body:{front:'hello'}}),200);
+    assert.deepEqual(result,{back:'안녕하세요',hint:'A greeting.',source:'mymemory+dictionaryapi'});
+    assert.equal((await session(actor)).revision,before.revision);
+    assert.equal(upstream.length,calls+2);
+    assert.ok(upstream.slice(calls).every(url=>['api.mymemory.translated.net','api.dictionaryapi.dev'].includes(new URL(url).hostname)));
+    assert.ok(upstream.slice(calls).every(url=>!url.includes(before.account.id)&&!url.includes(before.account.email)));
+    const id='123e4567-e89b-42d3-a456-426614174006';
+    const input=op('lookup-save',before.revision,{type:'customCardAdd',cardId:id,front:'hello',...result});
+    const saved=expectStatus(await actor.request('/api/progress',{method:'POST',body:input}),200);
+    assert.equal(saved.learner.customCards[0].hint,'A greeting.');assert.equal(saved.learner.customCards[0].source,'mymemory+dictionaryapi');
+    const replay=expectStatus(await actor.request('/api/progress',{method:'POST',body:{...input,revision:saved.revision}}),200);
+    assert.equal(replay.learner.customCards.filter(c=>c.id===id).length,1);
+    const ja=expectStatus(await b.request('/api/card-lookup',{method:'POST',body:{front:'猫'}}),200);
+    assert.deepEqual(ja,{back:'안녕하세요',hint:'cat (JMdict)',source:'mymemory+jisho'});
+    assert.ok(upstream.at(-1).startsWith('https://jisho.org/api/v1/search/words?keyword='));
+  });
+  await test('lookup rejects unauthenticated, invalid, missing, and unavailable results', async () => {
+    const count=upstream.length;
+    expectStatus(await anonymous.request('/api/card-lookup',{method:'POST',body:{front:'hello'}}),401);
+    for(const front of ['two words','x'.repeat(81),'あ'.repeat(70),'<script>'])expectStatus(await a.request('/api/card-lookup',{method:'POST',body:{front}}),400);
+    assert.equal(upstream.length,count);
+    for(const mode of ['missing','bad-status','quota','excessive','html']){providerMode=mode;expectStatus(await a.request('/api/card-lookup',{method:'POST',body:{front:'hello'}}),404);}
+    for(const mode of ['dictionary-404','malformed']){providerMode=mode;expectStatus(await a.request('/api/card-lookup',{method:'POST',body:{front:'hello'}}),404);}
+    for(const mode of ['malformed','jisho-empty']){providerMode=mode;expectStatus(await b.request('/api/card-lookup',{method:'POST',body:{front:'猫'}}),404);}
+    providerMode='unavailable';expectStatus(await a.request('/api/card-lookup',{method:'POST',body:{front:'hello'}}),503);
+    providerMode='oversize';expectStatus(await a.request('/api/card-lookup',{method:'POST',body:{front:'hello'}}),503);
+    providerMode='ok';
+    const actor=client(),registered=expectStatus(await actor.request('/api/auth/register',{method:'POST',body:account('lookup-owner@example.test')}),201);
+    const other=await session(b);
+    const changed=expectStatus(await actor.request('/api/card-lookup',{method:'POST',body:{expectedAccountId:registered.account.id,front:'hello'},cookie:b.cookie}),409);
+    assert.equal(changed.code,'ACCOUNT_CHANGED');assert.equal(changed.state,undefined);assert.notEqual(registered.account.id,other.account.id);
+  });
+  await test('lookup rate limit caps account requests before another provider call', async () => {
+    const actor=client();expectStatus(await actor.request('/api/auth/register',{method:'POST',body:account('lookup-limited@example.test')}),201);
+    for(let i=0;i<30;i++)expectStatus(await actor.request('/api/card-lookup',{method:'POST',body:{front:'hello'}}),200);
+    const count=upstream.length;
+    expectStatus(await actor.request('/api/card-lookup',{method:'POST',body:{front:'hello'}}),429);
+    assert.equal(upstream.length,count);
+  });
+  await test('custom cards persist through D1, edit, review, delete, and account isolation', async () => {
+    const id='123e4567-e89b-42d3-a456-426614174001';let state=await session(a);
+    assert.deepEqual(state.learner.customCards,[]);
+    state=expectStatus(await a.request('/api/progress',{method:'POST',body:op('card-add',state.revision,{type:'customCardAdd',cardId:id,front:'  Morning  ',back:'  아침  '})}),200);
+    assert.equal(state.learner.customCards[0].front,'Morning');assert.equal(state.learner.customCards[0].back,'아침');
+    assert.deepEqual((await session(b)).learner.customCards,[]);
+    const created=state.learner.customCards[0];
+    state=expectStatus(await a.request('/api/progress',{method:'POST',body:op('card-edit',state.revision,{type:'customCardEdit',cardId:id,front:'Morning!',back:''})}),200);
+    assert.equal(state.learner.customCards[0].createdAt,created.createdAt);assert.equal(state.learner.customCards[0].dueAt,created.dueAt);
+    state=expectStatus(await a.request('/api/progress',{method:'POST',body:op('card-review',state.revision,{type:'customCardReview',cardId:id,remembered:false})}),200);
+    assert.equal(state.learner.customCards[0].stage,0);assert.equal(state.learner.customCards[0].lastOutcome,'forgotten');
+    state=expectStatus(await a.request('/api/progress',{method:'POST',body:op('card-delete',state.revision,{type:'customCardDelete',cardId:id})}),200);
+    assert.deepEqual(state.learner.customCards,[]);
+    assert.deepEqual((await session(b)).learner.customCards,[]);
+  });
+  await test('custom card validation rejects bad text, duplicate IDs, and the 201st card', async () => {
+    const id='123e4567-e89b-42d3-a456-426614174002',base=await session(a);
+    for(const [label,front,back] of [['blank','  ',''],['long','a'.repeat(181),''],['control','bad\nline',''],['back','ok','b'.repeat(361)],['null-back','ok',null]]){
+      expectStatus(await a.request('/api/progress',{method:'POST',body:op(`card-invalid-${label}`,base.revision,{type:'customCardAdd',cardId:id,front,back})}),400);
+    }
+    let state=expectStatus(await a.request('/api/progress',{method:'POST',body:op('card-valid',base.revision,{type:'customCardAdd',cardId:id,front:'Valid',back:''})}),200);
+    expectStatus(await a.request('/api/progress',{method:'POST',body:op('card-duplicate',state.revision,{type:'customCardAdd',cardId:id,front:'Another'})}),409);
+    const many=Array.from({length:200},(_,i)=>({...state.learner.customCards[0],id:`123e4567-e89b-42d3-a456-${String(i).padStart(12,'0')}`}));
+    assert.equal(validateCustomCards(many).length,200);
+    assert.throws(()=>applyCustomCardOperation(many,{type:'customCardAdd',cardId:'123e4567-e89b-42d3-a456-426614174003',front:'Extra'},'UTC'),e=>e.code==='CUSTOM_CARD_LIMIT');
+    const full=client(),registered=expectStatus(await full.request('/api/auth/register',{method:'POST',body:account('full-cards@example.test')}),201);
+    const seeded={...registered.learner,customCards:many};
+    await db.prepare('UPDATE accounts SET learner_json=? WHERE id=?').bind(JSON.stringify(seeded),registered.account.id).run();
+    expectStatus(await full.request('/api/progress',{method:'POST',body:op('card-over-limit',registered.revision,{type:'customCardAdd',cardId:'123e4567-e89b-42d3-a456-426614174003',front:'Extra'})}),409);
+    assert.equal((await session(full)).learner.customCards.length,200);
+    assert.equal((await session(a)).revision,state.revision);
+  });
+  await test('custom card idempotency and revision rebase preserve one card', async () => {
+    const id='123e4567-e89b-42d3-a456-426614174004',before=await session(a);
+    const first=op('card-replay',before.revision,{type:'customCardAdd',cardId:id,front:'Replay'});
+    const applied=expectStatus(await a.request('/api/progress',{method:'POST',body:first}),200);
+    const replay=expectStatus(await a.request('/api/progress',{method:'POST',body:{...first,revision:applied.revision}}),200);
+    assert.equal(replay.revision,applied.revision);assert.equal(replay.learner.customCards.filter(c=>c.id===id).length,1);
+    expectStatus(await a.request('/api/progress',{method:'POST',body:{...first,front:'Different',revision:applied.revision}}),409);
+    const pending=op('card-rebase',before.revision,{type:'customCardEdit',cardId:id,front:'Rebased'});
+    const conflict=expectStatus(await a.request('/api/progress',{method:'POST',body:pending}),409);
+    assert.equal(conflict.code,'REVISION_CONFLICT');
+    const rebased=expectStatus(await a.request('/api/progress',{method:'POST',body:{...pending,revision:conflict.state.revision}}),200);
+    assert.equal(rebased.learner.customCards.find(c=>c.id===id).front,'Rebased');
+  });
+  await test('legacy account JSON normalizes cards and old/new imports validate cards', async () => {
+    const legacy=client(),old=expectStatus(await legacy.request('/api/auth/register',{method:'POST',body:account('legacy-cards@example.test')}),201);
+    const raw=structuredClone(old.learner);delete raw.customCards;
+    await db.prepare('UPDATE accounts SET learner_json=? WHERE id=?').bind(JSON.stringify(raw),old.account.id).run();
+    assert.deepEqual((await session(legacy)).learner.customCards,[]);
+    const updated=expectStatus(await legacy.request('/api/progress',{method:'POST',body:op('legacy-card-add',old.revision,{type:'customCardAdd',cardId:'123e4567-e89b-42d3-a456-426614174005',front:'Legacy'})}),200);
+    assert.equal(updated.learner.customCards.length,1);
+    const oldImport=client(),registered=expectStatus(await oldImport.request('/api/auth/register',{method:'POST',body:account('old-import-cards@example.test')}),201);
+    const imported=expectStatus(await oldImport.request('/api/import',{method:'POST',body:{operationId:'integration-card-old-import',revision:registered.revision,source:'wife',learner:raw}}),200);
+    assert.deepEqual(imported.learner.customCards,[]);
+    const newImport=client(),fresh=expectStatus(await newImport.request('/api/auth/register',{method:'POST',body:account('new-import-cards@example.test')}),201);
+    const card={...updated.learner.customCards[0],hint:'A previously checked hint.',source:'mymemory+dictionaryapi'};
+    const malformed={...raw,customCards:[{...card,front:'bad\ntext'}]};
+    expectStatus(await newImport.request('/api/import',{method:'POST',body:{operationId:'integration-card-invalid-import',revision:fresh.revision,source:'wife',learner:malformed}}),400);
+    const importedNew=expectStatus(await newImport.request('/api/import',{method:'POST',body:{operationId:'integration-card-new-import',revision:fresh.revision,source:'wife',learner:{...raw,customCards:[card]}}}),200);
+    assert.deepEqual(importedNew.learner.customCards,[card]);
+    assert.equal(importedNew.learner.customCards[0].id,card.id);
   });
   await test('four-character passwords register, log in and recover; three-character new passwords fail without consuming recovery', async () => {
     const actor = client(), login = client(), recoverer = client();

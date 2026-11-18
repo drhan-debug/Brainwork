@@ -37,6 +37,10 @@ async function fixture({saved=legacy,profiles=null,mobile=false,apiRoute=null}={
  const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));await page.clock.install({time:fixed});await page.goto(base);if(apiRoute)await page.getByRole('button',{name:'문장 세션 시작하기',exact:true}).waitFor();else await enterLocalDemo(page);if(!apiRoute)await page.getByLabel('학습자 선택').waitFor();return{page,context};
 }
 const state=page=>page.evaluate(()=>JSON.parse(localStorage.getItem('bloom-profiles-v2')));
+const cards=async(page,learner='wife')=>(await state(page)).learners[learner].customCards;
+async function openCards(page){await page.getByRole('button',{name:'내 암기장',exact:true}).click();return page.getByRole('region',{name:'내 암기장',exact:true});}
+async function addCard(section,front,back,hint){const form=section.locator('.custom-panel form.custom-form').first();await form.locator('textarea').nth(0).fill(front);if(back!==undefined)await form.locator('textarea').nth(1).fill(back);if(hint!==undefined)await form.locator('textarea').nth(2).fill(hint);await form.locator('button[type="submit"]').click();}
+async function openSavedCards(section){const details=section.locator('.custom-list-panel');if(!await details.evaluate(el=>el.open))await details.locator('summary').click();return details;}
 // Wrangler dev serves source assets without the packaged Worker's SPA fallback.
 // Keep the deep-link URL while loading the same app shell that production serves.
 async function adminResetShell(context){await context.route('**/admin/reset',async route=>route.fulfill({response:await route.fetch({url:base+'/'})}));}
@@ -91,7 +95,7 @@ try{
  });
  await test('legacy migration and malformed storage retain healthy records and original legacy key',async()=>{
   const {page,context}=await fixture();const s=await state(page);for(const[k,v]of Object.entries(legacy))assert.deepEqual(s.learners.wife[k],v,k);assert.deepEqual(await page.evaluate(()=>JSON.parse(localStorage.getItem('bloom-state'))),legacy);await page.reload();await enterLocalDemo(page);assert.deepEqual((await state(page)).learners,s.learners);await context.close();
-  const f=await fixture({saved:null,profiles:{version:2,active:'wife',learners:{wife:{learned:null,reviews:[],sessions:-1,minutes:'bad',custom:{keep:true}},husband:legacy}}});await f.page.getByRole('button',{name:'설정',exact:true}).click();await f.page.getByLabel('이름',{exact:true}).fill('Repaired');await f.page.getByRole('button',{name:'설정 완료'}).click();const repaired=(await state(f.page)).learners;assert.deepEqual(repaired.husband,{...legacy,sentenceProgress:{}});assert.deepEqual(repaired.wife.learned,[]);assert.equal(repaired.wife.sessions,0);assert.deepEqual(repaired.wife.custom,{keep:true});await f.context.close();
+  const f=await fixture({saved:null,profiles:{version:2,active:'wife',learners:{wife:{learned:null,reviews:[],sessions:-1,minutes:'bad',custom:{keep:true}},husband:legacy}}});await f.page.getByRole('button',{name:'설정',exact:true}).click();await f.page.getByLabel('이름',{exact:true}).fill('Repaired');await f.page.getByRole('button',{name:'설정 완료'}).click();const repaired=(await state(f.page)).learners;assert.deepEqual(repaired.husband,{...legacy,sentenceProgress:{},customCards:[]});assert.deepEqual(repaired.wife.learned,[]);assert.equal(repaired.wife.sessions,0);assert.deepEqual(repaired.wife.custom,{keep:true});await f.context.close();
  });
  for(const[learner,lang,scenarios]of [['wife','en',englishScenarios],['husband','ja',japaneseScenarios]])await test(`${lang} full session reuses selected sentences across all phases and three quizzes; completion writes once`,async()=>{
   const{page,context}=await fixture();const before=(await state(page)).learners;const scene=scenarios[7];await start(page,{learner,scenario:scene.id});assert.ok((await page.title()).includes(lang==='ja'?'일본어':'영어'));await complete(page,scene.sentences,{checkFlow:true,microphone:true});const stored=(await state(page)).learners;assert.equal(stored[learner].sessions,before[learner].sessions+1);assert.equal(Object.keys(stored[learner].sentenceProgress).length,scene.sentences.length);for(const s of scene.sentences){assert.equal(stored[learner].sentenceProgress[s.id].stage,1);assert.equal(stored[learner].sentenceProgress[s.id].lastOutcome,'passed');}for(const key of ['learned','reviews','reviewStages'])assert.deepEqual(stored[learner][key],before[learner][key]);assert.deepEqual(stored[learner==='wife'?'husband':'wife'],before[learner==='wife'?'husband':'wife']);const utterances=await page.evaluate(()=>window.__utterances);assert.deepEqual(utterances.map(u=>u.text),scene.sentences.map(s=>s.audioText));assert.ok(utterances.every(u=>u.lang===(lang==='ja'?'ja-JP':'en-US')));assert.deepEqual(await page.evaluate(()=>window.__recognitionLanguages),[lang==='ja'?'ja-JP':'en-US']);await click(page,dialog(page).getByRole('button',{name:'세션 닫기',exact:true}).last());assert.equal(await dialog(page).count(),0);await page.reload();await enterLocalDemo(page);assert.equal((await state(page)).learners[learner].sessions,before[learner].sessions+1);await context.close();
@@ -532,6 +536,204 @@ try{
    await page.getByRole('heading',{name:'다시 만나 반가워요',exact:true}).waitFor();
    await page.getByLabel('이메일',{exact:true}).fill('learner@example.test');await page.getByLabel('비밀번호',{exact:true}).fill('normal-password');await page.getByRole('button',{name:'로그인',exact:true}).last().click();
    await page.getByRole('alert').waitFor();assert.match(await page.getByRole('alert').innerText(),/이메일 또는 비밀번호/);assert.deepEqual(requests,['GET /api/admin/status','GET /api/session','POST /api/auth/login']);
+  }finally{await context.close();}
+ });
+ await test('custom cards in the local demo keep optional hints, learner isolation and edits across reload at 390px',async()=>{
+  const{page,context}=await fixture({saved:null,mobile:true});
+  try{
+   const section=await openCards(page);
+   await addCard(section,'  First memory  ');
+   await addCard(section,'Second memory','  helpful hint  ');
+   let wife=await cards(page);
+   assert.equal(wife.length,2);assert.equal(wife[0].front,'First memory');assert.equal(wife[0].back,'');assert.equal(wife[1].back,'helpful hint');
+   assert.ok(wife.every(card=>card.stage===0&&card.dueAt>fixed&&card.dueAt-fixed>=47*3600000&&card.dueAt-fixed<=49*3600000));
+   assert.equal(await section.getByText('전체 2개').count(),1);
+   assert.equal(await section.locator('.custom-overview time').count(),1);
+   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'card page has no horizontal overflow at 390px');
+   await choose(page,'husband');const japanese=await openCards(page);
+   assert.equal(await japanese.getByText('전체 0개').count(),1);
+   await addCard(japanese,'日本語の記憶','意味');
+   assert.equal((await cards(page,'husband')).length,1);
+   await choose(page,'wife');await openCards(page);
+   assert.deepEqual(await cards(page),wife,'switching learners preserves only the selected learner’s cards');
+   await page.reload();await enterLocalDemo(page);const restored=await openCards(page);
+   assert.deepEqual(await cards(page),wife,'both cards survive reload');
+   const firstDue=wife[0].dueAt;await openSavedCards(restored);await restored.getByRole('button',{name:'First memory 수정'}).click();
+   const editing=restored.locator('.custom-edit-form');await editing.getByLabel('외울 내용').fill('First memory edited');await editing.getByLabel('뜻').fill('new hint');await editing.getByRole('button',{name:'저장',exact:true}).click();
+   wife=await cards(page);assert.equal(wife.length,2);assert.equal(wife[0].front,'First memory edited');assert.equal(wife[0].back,'new hint');assert.equal(wife[0].dueAt,firstDue);
+   page.once('dialog',dialog=>dialog.accept());await restored.getByRole('button',{name:'Second memory 삭제'}).click();
+   assert.deepEqual((await cards(page)).map(card=>card.front),['First memory edited']);
+   assert.equal((await cards(page,'husband')).length,1,'deletion does not touch Japanese learner');
+  }finally{await context.close();}
+ });
+ await test('custom card review reveals before grading and schedules remembered and forgotten outcomes',async()=>{
+  const{page,context}=await fixture({saved:null,mobile:true});
+  try{
+   const section=await openCards(page);await addCard(section,'Recall me','A private cue');await addCard(section,'Try again');
+   const initial=await cards(page);await page.clock.setFixedTime(new Date(initial[0].dueAt+1000));await page.reload();await enterLocalDemo(page);const review=await openCards(page);
+   assert.equal(await review.locator('.custom-cue').getByText('A private cue').count(),1);
+   assert.equal(await review.getByRole('button',{name:'기억했어요'}).count(),0,'grading is unavailable before reveal');
+   assert.equal(await review.locator('.custom-review').getByText('Recall me').count(),0,'front stays hidden before reveal');
+   assert.equal(await review.locator('.custom-list-panel').evaluate(el=>el.open),false,'saved answers start collapsed');
+   await review.getByRole('button',{name:'외울 내용 보기'}).click();
+   assert.match(await review.locator('.custom-answer').innerText(),/외울 내용\s+Recall me/);
+   await review.getByRole('button',{name:'기억했어요'}).click();
+   let after=await cards(page);let remembered=after.find(card=>card.id===initial[0].id);
+   assert.equal(remembered.stage,1);assert.equal(remembered.lastOutcome,'remembered');assert.ok(remembered.dueAt>initial[0].dueAt+2*86400000);
+   const masked=await review.locator('.custom-review .custom-cue p').innerText();assert.ok(masked.includes('•')&&!masked.includes('Try again'),'hintless card has a masked cue before reveal');
+   await review.getByRole('button',{name:'외울 내용 보기'}).click();await review.getByRole('button',{name:'다시 볼게요'}).click();
+   after=await cards(page);const forgotten=after.find(card=>card.id===initial[1].id);
+   assert.equal(forgotten.stage,0);assert.equal(forgotten.lastOutcome,'forgotten');assert.ok(forgotten.dueAt>initial[1].dueAt&&forgotten.dueAt<initial[1].dueAt+2*86400000);
+   assert.equal(await review.getByText('0개 남음').count(),1);assert.equal(await review.locator('.custom-overview time').count(),1);
+   await page.reload();await enterLocalDemo(page);await openCards(page);assert.deepEqual(await cards(page),after,'review schedule survives reload');
+  }finally{await context.close();}
+ });
+ await test('custom card account save failures retry one add and one review without duplicating either',async()=>{
+  const profile={name:'계정 암기장',language:'en',goal:10,timezone:'America/New_York'};
+  let remote={authenticated:true,account:{id:'cards-test-account',email:'cards@example.test'},profile,learner:blankLearner(profile),revision:0,imports:[]};
+  const requests=[],failed=new Set(),applied=new Set();let serverNow=fixed;
+  const apiRoute=async route=>{
+   const request=route.request(),path=new URL(request.url()).pathname;
+   if(path==='/api/session'&&request.method()==='GET')return route.fulfill({json:remote});
+   if(path!=='/api/progress'||request.method()!=='POST')return route.fulfill({status:500,json:{code:'UNEXPECTED_TEST_REQUEST'}});
+   const body=request.postDataJSON();requests.push(body);
+   if(['customCardAdd','customCardReview'].includes(body.type)&&!failed.has(body.type)){failed.add(body.type);return route.fulfill({status:503,json:{code:'STORAGE_UNAVAILABLE'}});}
+   if(!applied.has(body.operationId)){remote={...remote,revision:remote.revision+1,learner:applyProgress(remote.learner,body,profile,serverNow)};applied.add(body.operationId);}
+   return route.fulfill({json:remote});
+  };
+  const{page,context}=await fixture({saved:null,mobile:true,apiRoute});
+  try{
+   const section=await openCards(page);await addCard(section,'Account memory','cue');
+   await page.locator('.account-status.failed').waitFor();assert.equal(remote.learner.customCards.length,0);
+   await page.locator('.account-status').getByRole('button',{name:'다시 저장'}).click();await page.locator('.account-status').filter({hasText:'내 계정에 저장'}).waitFor();
+   assert.equal(remote.learner.customCards.length,1);assert.deepEqual(requests[1],requests[0]);
+   const id=remote.learner.customCards[0].id;
+   serverNow=remote.learner.customCards[0].dueAt+1000;await page.clock.setFixedTime(new Date(serverNow));await page.reload();const review=await openCards(page);
+   await review.getByRole('button',{name:'외울 내용 보기'}).click();await review.getByRole('button',{name:'기억했어요'}).click();
+   await page.locator('.account-status.failed').waitFor();assert.equal(remote.learner.customCards[0].stage,0);
+   await page.locator('.account-status').getByRole('button',{name:'다시 저장'}).click();await page.locator('.account-status').filter({hasText:'내 계정에 저장'}).waitFor();
+   assert.deepEqual(requests[3],requests[2]);assert.equal(remote.learner.customCards.length,1);assert.equal(remote.learner.customCards[0].id,id);assert.equal(remote.learner.customCards[0].stage,1);assert.equal(remote.learner.customCards[0].lastOutcome,'remembered');
+   await page.reload();await openCards(page);assert.equal(remote.learner.customCards.length,1);assert.equal(requests.length,4);
+   assert.equal(await page.evaluate(()=>localStorage.getItem('bloom-profiles-v2')),null,'account card does not enter local demo storage');
+  }finally{await context.close();}
+ });
+ await test('custom card account conflict drops only a removed-card edit, saves queued add and keeps a notice',async()=>{
+  const profile={name:'충돌 계정',language:'en',goal:10,timezone:'America/New_York'};
+  const targetId='94a55af2-81f6-4d59-9e64-157192717126';
+  let learner=applyProgress(blankLearner(profile),{type:'customCardAdd',cardId:targetId,front:'Device card',back:''},profile,fixed);
+  let remote={authenticated:true,account:{id:'cards-conflict-account',email:'conflict@example.test'},profile,learner,revision:1,imports:[]};
+  const requests=[];let releaseConflict;const conflictGate=new Promise(resolve=>releaseConflict=resolve);
+  const apiRoute=async route=>{
+   const request=route.request(),path=new URL(request.url()).pathname;
+   if(path==='/api/session'&&request.method()==='GET')return route.fulfill({json:remote});
+   if(path!=='/api/progress'||request.method()!=='POST')return route.fulfill({status:500,json:{code:'UNEXPECTED_TEST_REQUEST'}});
+   const body=request.postDataJSON();requests.push(body);
+   if(body.type==='customCardEdit'){
+    await conflictGate;
+    remote={...remote,learner:applyProgress(remote.learner,{type:'customCardDelete',cardId:targetId},profile,fixed),revision:2};
+    return route.fulfill({status:409,json:{code:'REVISION_CONFLICT',state:remote}});
+   }
+   remote={...remote,learner:applyProgress(remote.learner,body,profile,fixed),revision:remote.revision+1};
+   return route.fulfill({json:remote});
+  };
+  const{page,context}=await fixture({saved:null,mobile:true,apiRoute});
+  try{
+   const section=await openCards(page);await openSavedCards(section);await section.getByRole('button',{name:'Device card 수정'}).click();
+   const editing=section.locator('.custom-edit-form');await editing.getByLabel('외울 내용').fill('Stale edit');await editing.getByRole('button',{name:'저장',exact:true}).click();
+   await addCard(section,'Independent memory','manual cue');releaseConflict();
+   await page.locator('.account-status').filter({hasText:'내 계정에 저장'}).waitFor();
+   assert.deepEqual(remote.learner.customCards.map(card=>card.front),['Independent memory']);
+   assert.deepEqual(requests.map(body=>body.type),['customCardEdit','customCardAdd'],'conflicting edit is not retried, while queued add saves');
+   assert.equal(requests[1].revision,2);
+   const notice=page.locator('.card-conflict-notice');await notice.waitFor();assert.match(await notice.innerText(),/다른 기기.*1개 변경.*저장할 수 없었어요/);
+   await page.getByRole('button',{name:'홈',exact:true}).click();assert.ok(await notice.isVisible(),'notice persists through navigation');
+   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  }finally{releaseConflict();await context.close();}
+ });
+ await test('custom card account word lookup saves meaning, hint and source once, retries save, and preserves edits at 390px',async()=>{
+  const profile={name:'단어 계정',language:'en',goal:10,timezone:'America/New_York'};
+  let remote={authenticated:true,account:{id:'lookup-account',email:'lookup@example.test'},profile,learner:blankLearner(profile),revision:0,imports:[]};
+  const lookups=[],writes=[];let failSave=true;
+  const apiRoute=async route=>{
+   const request=route.request(),path=new URL(request.url()).pathname;
+   if(path==='/api/session'&&request.method()==='GET')return route.fulfill({json:remote});
+   if(path==='/api/card-lookup'&&request.method()==='POST'){
+    lookups.push(request.postDataJSON());
+    return route.fulfill({json:{back:'꽃이 피다',hint:'to produce flowers',source:'mymemory+dictionaryapi'}});
+   }
+   if(path==='/api/progress'&&request.method()==='POST'){
+    const body=request.postDataJSON();writes.push(body);
+    if(failSave){failSave=false;return route.fulfill({status:503,json:{code:'STORAGE_UNAVAILABLE'}});}
+    remote={...remote,learner:applyProgress(remote.learner,body,profile,fixed),revision:remote.revision+1};return route.fulfill({json:remote});
+   }
+   return route.fulfill({status:500,json:{code:'UNEXPECTED_TEST_REQUEST'}});
+  };
+  const{page,context}=await fixture({saved:null,mobile:true,apiRoute});
+  try{
+   const section=await openCards(page),form=section.locator('.custom-panel form.custom-form').first();
+   await form.locator('textarea').first().fill('bloom');
+   await form.evaluate(element=>{element.requestSubmit();element.requestSubmit();});
+   await section.locator('.custom-lookup-result').waitFor();await page.locator('.account-status.failed').waitFor();
+   assert.equal(lookups.length,1,'double submit triggers only one lookup');
+   assert.deepEqual(lookups[0],{expectedAccountId:remote.account.id,front:'bloom'});
+   assert.equal(writes.length,1);assert.equal(remote.learner.customCards.length,0);
+   assert.deepEqual({back:writes[0].back,hint:writes[0].hint,source:writes[0].source},{back:'꽃이 피다',hint:'to produce flowers',source:'mymemory+dictionaryapi'});
+   assert.match(await section.locator('.custom-lookup-result').innerText(),/처음 조회한 출처: MyMemory · Dictionary API/);
+   await page.locator('.account-status').getByRole('button',{name:'다시 저장'}).click();await page.locator('.account-status').filter({hasText:'내 계정에 저장'}).waitFor();
+   assert.deepEqual(writes[1],writes[0]);assert.equal(lookups.length,1,'save retry does not fetch the word again');
+   assert.equal(remote.learner.customCards.length,1);
+   const saved=remote.learner.customCards[0];assert.equal(saved.back,'꽃이 피다');assert.equal(saved.hint,'to produce flowers');assert.equal(saved.source,'mymemory+dictionaryapi');
+   assert.match(await section.locator('.custom-lookup-result').innerText(),/맞는지 확인하고 필요하면 수정/);
+   await section.locator('.custom-lookup-result').getByRole('button',{name:'이 항목 수정하기'}).click();
+   assert.equal(await section.locator('.custom-list-panel').evaluate(el=>el.open),true);
+   const edit=section.locator('.custom-edit-form');assert.equal(await edit.count(),1);assert.ok(await edit.getByLabel('외울 내용').evaluate(el=>el===document.activeElement));
+   assert.match(await edit.locator('textarea').nth(1).inputValue(),/꽃이 피다/);assert.match(await edit.locator('textarea').nth(2).inputValue(),/to produce flowers/);
+   await edit.getByLabel('힌트').fill('My own cue');await edit.getByRole('button',{name:'저장',exact:true}).click();
+   await page.locator('.account-status').filter({hasText:'내 계정에 저장'}).waitFor();
+   assert.equal(remote.learner.customCards.length,1);assert.equal(remote.learner.customCards[0].hint,'My own cue');assert.equal(remote.learner.customCards[0].source,'mymemory+dictionaryapi');
+   await openSavedCards(section);const source=section.locator('.custom-row .custom-source');assert.match(await source.innerText(),/처음 조회한 출처: MyMemory · Dictionary API/);
+   assert.deepEqual(await source.locator('a').evaluateAll(links=>links.map(link=>new URL(link.href).host)),['mymemory.translated.net','dictionaryapi.dev']);
+   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  }finally{await context.close();}
+ });
+ await test('custom card lookup failure keeps the draft for manual entry without another lookup',async()=>{
+  const profile={name:'조회 실패 계정',language:'en',goal:10,timezone:'America/New_York'};
+  let remote={authenticated:true,account:{id:'lookup-failure-account',email:'lookup-failure@example.test'},profile,learner:blankLearner(profile),revision:0,imports:[]};
+  let lookupCount=0,writeCount=0;
+  const apiRoute=async route=>{
+   const request=route.request(),path=new URL(request.url()).pathname;
+   if(path==='/api/session'&&request.method()==='GET')return route.fulfill({json:remote});
+   if(path==='/api/card-lookup'){lookupCount++;return route.fulfill({status:503,json:{code:'LOOKUP_UNAVAILABLE',error:'Word lookup is temporarily unavailable.'}});}
+   if(path==='/api/progress'){writeCount++;remote={...remote,learner:applyProgress(remote.learner,request.postDataJSON(),profile,fixed),revision:remote.revision+1};return route.fulfill({json:remote});}
+   return route.fulfill({status:500,json:{code:'UNEXPECTED_TEST_REQUEST'}});
+  };
+  const{page,context}=await fixture({saved:null,mobile:true,apiRoute});
+  try{
+   const section=await openCards(page),form=section.locator('.custom-panel form.custom-form').first();await form.locator('textarea').first().fill('unwind');await form.locator('button[type="submit"]').click();
+   await section.locator('.custom-lookup-error').waitFor();assert.match(await section.locator('.custom-lookup-error').innerText(),/직접 적어 추가/);
+   assert.equal(await form.locator('textarea').first().inputValue(),'unwind');assert.equal(writeCount,0);
+   await form.locator('textarea').nth(1).fill('긴장을 풀다');await form.locator('textarea').nth(2).fill('after a long day');await form.locator('button[type="submit"]').click();
+   await page.locator('.account-status').filter({hasText:'내 계정에 저장'}).waitFor();
+   assert.equal(lookupCount,1);assert.equal(writeCount,1);assert.equal(remote.learner.customCards[0].back,'긴장을 풀다');assert.equal(remote.learner.customCards[0].hint,'after a long day');assert.equal(remote.learner.customCards[0].source,'');
+  }finally{await context.close();}
+ });
+ await test('custom card lookup rejects a changed account before any card is saved',async()=>{
+  const profile={name:'원래 계정',language:'en',goal:10,timezone:'America/New_York'};
+  const remote={authenticated:true,account:{id:'original-account',email:'original@example.test'},profile,learner:blankLearner(profile),revision:0,imports:[]};
+  const requests=[];
+  const apiRoute=async route=>{
+   const request=route.request(),path=new URL(request.url()).pathname;requests.push(request.method()+' '+path);
+   if(path==='/api/session')return route.fulfill({json:remote});
+   if(path==='/api/card-lookup')return route.fulfill({status:409,json:{code:'ACCOUNT_CHANGED',error:'Account changed.'}});
+   return route.fulfill({status:500,json:{code:'UNEXPECTED_TEST_REQUEST'}});
+  };
+  const{page,context}=await fixture({saved:null,mobile:true,apiRoute});
+  try{
+   const section=await openCards(page);await addCard(section,'bloom');
+   await page.getByRole('heading',{name:'다시 만나 반가워요',exact:true}).waitFor();
+   assert.match(await page.getByRole('alert').innerText(),/다른 탭에서 계정이 바뀌었어요/);
+   assert.deepEqual(requests,['GET /api/session','POST /api/card-lookup'],'changed account cannot save a looked-up card');
+   assert.equal(remote.learner.customCards.length,0);
   }finally{await context.close();}
  });
  await test('linked SVG favicon is served successfully as an SVG image',async()=>{

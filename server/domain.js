@@ -1,4 +1,5 @@
 import { isKnownSentenceId, sentenceIdsForLanguage } from '../src/learning/schema.js';
+import { applyCustomCardOperation, normalizeCustomCards } from '../src/learning/customCards.js';
 
 export class ApiError extends Error {
   constructor(status, code, message, state) { super(message); Object.assign(this, { status, code, state }); }
@@ -23,10 +24,10 @@ export function profileInput(input) {
   return {name:name.trim(), language, goal, timezone};
 }
 export function blankLearner(profile) {
-  return {learned:[],reviews:{},reviewStages:{},sessions:0,minutes:0,name:profile.name,goal:profile.goal,dates:[],dailyMinutes:{},sentenceProgress:{}};
+  return {learned:[],reviews:{},reviewStages:{},sessions:0,minutes:0,name:profile.name,goal:profile.goal,dates:[],dailyMinutes:{},sentenceProgress:{},customCards:[]};
 }
 export function hasActivity(learner) {
-  return learner.sessions > 0 || learner.minutes > 0 || learner.learned.length > 0 || Object.keys(learner.reviews).length > 0 || Object.keys(learner.sentenceProgress).length > 0;
+  return learner.sessions > 0 || learner.minutes > 0 || learner.learned.length > 0 || Object.keys(learner.reviews).length > 0 || Object.keys(learner.sentenceProgress).length > 0 || (learner.customCards?.length||0)>0;
 }
 export function localParts(at, timezone) {
   const parts = new Intl.DateTimeFormat('en-US', {timeZone:timezone, year:'numeric',month:'numeric',day:'numeric',hour:'numeric',minute:'numeric',second:'numeric',hourCycle:'h23'}).formatToParts(at);
@@ -56,6 +57,7 @@ function session(learner, elapsedMs, profile, at) {
 }
 export function applyProgress(previous, input, profile, at = Date.now()) {
   const learner = structuredClone(previous);
+  learner.customCards = normalizeCustomCards(learner.customCards);
   if (input.type === 'sentenceSession') {
     if (!Array.isArray(input.results) || input.results.length < 1 || input.results.length > 240) fail('INVALID_RESULTS','Provide 1–240 sentence attempts.');
     const outcomes = new Map();
@@ -81,6 +83,10 @@ export function applyProgress(previous, input, profile, at = Date.now()) {
     }
     if (input.completed) session(learner,input.elapsedMs,profile,at);
   } else if (input.type === 'dialogueSession') session(learner,input.elapsedMs,profile,at);
+  else if (['customCardAdd','customCardEdit','customCardReview','customCardDelete'].includes(input.type)) {
+    try { learner.customCards=applyCustomCardOperation(learner.customCards,input,profile.timezone,at); }
+    catch(error) { if(error.code) fail(error.code,error.message,error.code==='CUSTOM_CARD_NOT_FOUND'?404:error.code==='CUSTOM_CARD_EXISTS'||error.code==='CUSTOM_CARD_LIMIT'?409:400); throw error; }
+  }
   else fail('INVALID_OPERATION','Unknown progress operation.');
   return learner;
 }
@@ -114,5 +120,7 @@ export function importLearner(input, profile) {
     if (!validSentence(id,profile.language) || !record(entry) || !integer(entry.stage,0,5) || !finite(entry.dueAt) || !finite(entry.lastReviewedAt) || !['passed','failed'].includes(entry.lastOutcome)) fail('INVALID_IMPORT','Invalid local sentence progress.');
     out.sentenceProgress[id] = {stage:entry.stage,dueAt:entry.dueAt,lastReviewedAt:entry.lastReviewedAt,lastOutcome:entry.lastOutcome};
   }
+  try { out.customCards=normalizeCustomCards(input.customCards); }
+  catch { fail('INVALID_IMPORT','Invalid custom cards.'); }
   return out;
 }

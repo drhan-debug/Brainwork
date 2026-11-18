@@ -1,5 +1,7 @@
 import { scryptAsync } from '@noble/hashes/scrypt.js';
 import { ApiError, fail, record, profileInput, blankLearner, hasActivity, applyProgress, importLearner } from './domain.js';
+import { normalizeCustomCards } from '../src/learning/customCards.js';
+import { lookupCard, lookupWordInput } from './cardLookup.js';
 
 const SESSION_MS = 30*86400000;
 const COOKIE = '__Host-bloom_session';
@@ -67,7 +69,7 @@ async function readBody(request) {
   if(!record(body))fail('INVALID_JSON','A JSON object is required.');
   return body;
 }
-const state = row => ({authenticated:true,account:{id:row.id,email:row.email},profile:JSON.parse(row.profile_json),learner:JSON.parse(row.learner_json),revision:row.revision,imports:JSON.parse(row.imports_json)});
+const state = row => {const learner=JSON.parse(row.learner_json);learner.customCards=normalizeCustomCards(learner.customCards);return {authenticated:true,account:{id:row.id,email:row.email},profile:JSON.parse(row.profile_json),learner,revision:row.revision,imports:JSON.parse(row.imports_json)};};
 async function findSession(request,db) {
   const matches = (request.headers.get('cookie')||'').split(';').map(s=>s.trim()).filter(s=>s.startsWith(`${COOKIE}=`));
   const token=matches.length===1?matches[0].slice(COOKIE.length+1):'';
@@ -95,6 +97,15 @@ async function adminRateLimit(request,db,kind) {
   const key=await digest(`admin:${kind}:ip:${ip}`);
   const result=await db.prepare('INSERT INTO auth_limits(key,window_start,attempts) VALUES(?,?,1) ON CONFLICT(key) DO UPDATE SET attempts=CASE WHEN auth_limits.window_start<? THEN 1 ELSE auth_limits.attempts+1 END, window_start=CASE WHEN auth_limits.window_start<? THEN excluded.window_start ELSE auth_limits.window_start END RETURNING attempts').bind(key,now,now-window,now-window).first();
   if(result.attempts>12)fail('RATE_LIMITED','Too many attempts. Try again in 15 minutes.',429);
+}
+async function lookupRateLimit(request,db,accountId) {
+  const now=Date.now(),window=15*60000,ip=request.headers.get('cf-connecting-ip')||'local';
+  for(const [kind,value,max] of [['account',accountId,30],['ip',ip,120]]){
+    const key=await digest(`lookup:${kind}:${value}`);
+    const result=await db.prepare('INSERT INTO auth_limits(key,window_start,attempts) VALUES(?,?,1) ON CONFLICT(key) DO UPDATE SET attempts=CASE WHEN auth_limits.window_start<? THEN 1 ELSE auth_limits.attempts+1 END, window_start=CASE WHEN auth_limits.window_start<? THEN excluded.window_start ELSE auth_limits.window_start END RETURNING attempts').bind(key,now,now-window,now-window).first();
+    if(result.attempts>max)fail('RATE_LIMITED','Too many word lookups. Try again in 15 minutes.',429);
+  }
+  await db.prepare('DELETE FROM auth_limits WHERE key IN (SELECT key FROM auth_limits WHERE window_start<? LIMIT 100)').bind(now-86400000).run();
 }
 function adminAuthorized(request,secret) {
   if(typeof secret!=='string'||!/^[a-f0-9]{64}$/i.test(secret))return false;
@@ -248,7 +259,7 @@ async function updateAccount(db,row,body,path,sessionHash) {
 }
 export async function api(request,env) {
   const url=new URL(request.url),path=url.pathname;
-  const methods={'/api/session':'GET','/api/auth/register':'POST','/api/auth/login':'POST','/api/auth/logout':'POST','/api/auth/recover':'POST','/api/admin/status':'GET','/api/admin/setup':'POST','/api/admin/password-reset':'POST','/api/admin/password-change':'POST','/api/admin/password-recover':'POST','/api/profile':'PATCH','/api/progress':'POST','/api/import':'POST'};
+  const methods={'/api/session':'GET','/api/auth/register':'POST','/api/auth/login':'POST','/api/auth/logout':'POST','/api/auth/recover':'POST','/api/admin/status':'GET','/api/admin/setup':'POST','/api/admin/password-reset':'POST','/api/admin/password-change':'POST','/api/admin/password-recover':'POST','/api/profile':'PATCH','/api/progress':'POST','/api/import':'POST','/api/card-lookup':'POST'};
   if(!methods[path])fail('NOT_FOUND','API endpoint not found.',404);
   if(request.method!==methods[path])fail('METHOD_NOT_ALLOWED','Method not allowed.',405);
   if(!env.DB)fail('STORAGE_UNAVAILABLE','Account storage is not configured.',503);
@@ -275,6 +286,11 @@ export async function api(request,env) {
     return response({authenticated:false},200,{'Set-Cookie':cookie('',0)});
   }
   if(!session)fail('AUTH_REQUIRED','Sign in to your Bloom account.',401);
+  if(path==='/api/card-lookup'){
+    const word=lookupWordInput(body.front);
+    await lookupRateLimit(request,db,session.row.id);
+    return response(await lookupCard(word,JSON.parse(session.row.profile_json).language));
+  }
   return updateAccount(db,session.row,body,path,session.tokenHash);
 }
 export default {

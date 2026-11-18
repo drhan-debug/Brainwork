@@ -12,7 +12,7 @@ All responses are JSON, `Cache-Control: no-store`. Send JSON and a same-origin `
  account: {id, email},
  profile: {name, language: 'en'|'ja', goal: 10, timezone: 'Asia/Seoul'},
  learner: {learned:[], reviews:{}, reviewStages:{}, sessions:0, minutes:0,
-           name, goal, dates:[], dailyMinutes:{}, sentenceProgress:{}},
+           name, goal, dates:[], dailyMinutes:{}, sentenceProgress:{}, customCards:[]},
  revision: 0,
  imports: [{source:'wife'|'husband'|'legacy', importedAt:1710000000000}]
 }
@@ -46,6 +46,14 @@ A successful account reset changes only the password hash and recovery hash for 
 - `type:'sentenceSession'`: `results:[{sentenceId:'en:cafe_order:1',passed:true},...], elapsedMs`. 1–240 attempts, sentences from account language only. English accepts the new `en:mom_v1_<theme>:1..5` catalog and preserved legacy `en:<scenario>:1..4`; Japanese accepts only the original `ja:<scenario>:1..4`. Duplicate attempts are combined: any failure wins. Increments completed sessions and time once.
 - `type:'wordAnswer'`: `wordKey,known:<boolean>,completed:<boolean>,elapsedMs`. Exact existing vocabulary key. Only completed=true increments sessions/time. Word schedule matches legacy UI (failed 10m; successful 1/3/7/14/30 days; early practice preserves due date).
 - `type:'dialogueSession'`: `elapsedMs`. Records one completed session/time.
+- `type:'customCardAdd'`: `cardId:<UUID>,front,back?,hint?,source?`. Creates one card, due two account-local calendar days later. Front is required and limited to 180 Unicode codepoints; back is optional and limited to 360; hint is optional and limited to 240. Text is trimmed and must contain no control characters. Source is `''` for manual cards, `mymemory+dictionaryapi`, or `mymemory+jisho`. Maximum 200 cards per learner.
+- `type:'customCardEdit'`: `cardId,front,back?,hint?,source?`. Replaces text while preserving the card schedule and creation time. Omitted hint/source retain their existing values.
+- `type:'customCardReview'`: `cardId,remembered:<boolean>`. Due remembered cards advance through stages 1–5 with intervals 3/7/14/30/60 account-local calendar days. Early remembered practice records the outcome without advancing or postponing the due date. Forgotten cards return to stage 0, due next account-local midnight.
+- `type:'customCardDelete'`: `cardId`. Removes the card.
+
+Each card is `{id,front,back,hint,source,createdAt,dueAt,stage,lastReviewedAt,lastOutcome}`. New cards have stage 0 and null review fields; later outcomes are `remembered` or `forgotten`. Timestamps are Unix milliseconds. The client supplies a stable UUID as `cardId` and retains the operation ID when retrying. Missing cards and duplicate card IDs are rejected.
+
+`POST /api/card-lookup`: `{expectedAccountId,front}`. Authenticated, same-origin, read only; no revision or operation ID. Accepts one English or Japanese word with up to 80 Unicode codepoints and 200 UTF-8 bytes. Returns `{back,hint,source}`. The server looks up a Korean meaning through MyMemory and an English review hint through DictionaryAPI for English or Jisho/JMdict for Japanese. Jisho's public endpoint may be unavailable; failures return `LOOKUP_UNAVAILABLE` (503). Missing reliable meaning or hint returns `LOOKUP_NOT_FOUND` (404); invalid input returns `INVALID_LOOKUP_WORD` (400). Per-account and IP lookup limits return `RATE_LIMITED` (429). The client saves the result with `customCardAdd`; lookup alone does not change learner state. Only the word and language are sent to the providers, without account identifiers or email. The Japanese hint includes JMdict attribution.
 
 All durations must be finite 0–7200000 milliseconds. Sentence success intervals are 3/7/14/30/60 account-local calendar days; failure is next account-local midnight. Early success preserves due date.
 
@@ -59,4 +67,4 @@ Error bodies `{code,error}`; revision conflicts also `{state:<current authentica
 
 Progress/import use atomic revision checks plus idempotency records. On `REVISION_CONFLICT`, replace the current snapshot with `state`, then replay the same semantic operation with its original operationId and the new revision. A replay of an applied operation returns the CURRENT state without applying again. Same operationId with different payload (excluding revision) yields `OPERATION_REUSED`. Profile edits can explicitly retry against the returned revision. Never submit a full learner snapshot for normal progress.
 
-Sentence progress imports accept up to 180 registered English IDs (100 maternal + 80 legacy), or 80 registered Japanese IDs. Legacy English progress is retained under its original IDs and remains reviewable; it is never relabeled as maternal content.
+Sentence progress imports accept up to 180 registered English IDs (100 maternal + 80 legacy), or 80 registered Japanese IDs. Legacy English progress is retained under its original IDs and remains reviewable; it is never relabeled as maternal content. Legacy imports without `customCards` become an empty array. Legacy cards without hint/source receive empty strings. Imports with cards require a valid array of at most 200 complete card records with unique UUIDs; invalid cards reject the whole import.
